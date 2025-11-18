@@ -15,24 +15,24 @@ The application follows a decoupled client-server model:
 ```mermaid
 graph TD
     subgraph "User's Browser"
-        A[React SPA] -- Manages --> B(Three.js Canvas);
-        A -- State --> C{Zustand State Store};
+        A[React SPA with CopilotKit] -- Manages --> B(Three.js Canvas);
     end
     subgraph "Cloud (Vercel)"
-        F[Serverless Function - Node.js] -- Securely Calls --> G[LLM API];
+        F[Serverless Function - Python/FastAPI/pydanticAI] -- Securely Calls --> G[LLM API];
     end
-    A -- API Request (HTTPS) --> F;
-    F -- JSON Response --> A;
+    A -- AG-UI Protocol (HTTPS) --> F;
+    F -- AG-UI Event Stream --> A;
 ```
 
 ## 3. Technology Stack
 -   **Frontend:**
-    -   **Framework:** React (with Vite and TypeScript)
+    -   **Framework:** React 19 (with Vite and TypeScript)
     -   **3D Rendering:** `three`, `@react-three/fiber`, `@react-three/drei`
-    -   **State Management:** `zustand`
+    -   **Agent Communication:** `@copilotkit/react-core`, `@copilotkit/react-ui`
 -   **Backend:**
-    -   **Runtime:** Node.js
-    -   **Framework:** `express`
+    -   **Runtime:** Python 3.9+
+    -   **Framework:** `FastAPI`
+    -   **AI Agent:** `pydantic-ai`
 -   **Deployment:**
     -   **Platform:** Vercel
 
@@ -43,8 +43,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 1:** Frontend Project Scaffolding
     -   **[✓] Step 2:** Install Core Frontend Dependencies
     -   **[✓] Step 3:** Backend API Setup
-    -   **[ ] Step 4:** Basic 3D Scene Setup
-    -   **[ ] Step 5:** State Management (Zustand)
+    -   **[✓] Step 4:** Basic 3D Scene Setup
+    -   **[✓] Step 5:** Chat UI Setup (CopilotKit)
 -   **[ ] Phase 2: Voxel Engine and API Development**
 -   **[ ] Phase 3: UI and Feature Integration**
 -   **[ ] Phase 4: Finalization and Deployment**
@@ -52,17 +52,17 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 ## 5. Development Process & Key Learnings
 
 ### 5.1. PRP (Project Realization Plan) Process
--   Each implementation step from the plan must be documented with an `INITIAL` and a `REPORT` markdown file in `PRPs/reports/`.
--   The naming convention is `P<Phase_Number>S<Step_Number>-<TYPE>.md` (e.g., `P1S1-INITIAL.md`).
+-   Each implementation step from the plan is documented with a PRP markdown file in the `PRPs/` directory.
+-   The naming convention is `P<Phase_Number>S<Step_Number>-<Description>.md` (e.g., `P1S4-Basic-3D-Scene.md`).
 
-### 5.2. Critical: Atomic Commits & Branching
--   **Core Rule:** Every PRP step must be executed on its own dedicated feature branch.
--   **Rationale:** Code reviews have repeatedly emphasized that commits must be **atomic**. A submission should only contain the specific changes related to the single step being implemented. Bundling work from multiple steps into one commit is not acceptable.
--   **Workflow:**
-    1.  Start a new branch for the step (e.g., `feature/p1s4-scene-setup`).
-    2.  Complete the work for that single step.
-    3.  Submit the changes.
-    4.  Merge, and then start the next step from a fresh branch.
+### 5.2. Frontend Verification
+-   Frontend changes are verified using Playwright scripts.
+-   A temporary verification script is created in `/home/jules/verification` to take a screenshot of the changes.
+-   The screenshot is then visually inspected to confirm the changes are correct.
 
-### 5.3. Minor Technical Learnings
--   The command `npm init -y --prefix <dir>` can have unintended side effects and may modify the root `package.json`. The safer approach for initializing a sub-project is to create the `package.json` manually or `cd` into the directory first.
+### 5.3. Vite Configuration
+-   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5.
+-   The configuration is `define: { 'process.env': {} }`.
+
+### 5.4. Canvas Rendering
+-   The `@react-three/fiber` `<Canvas>` component requires a `style` prop (e.g., `style={{ height: '100%' }}`) to ensure it renders correctly and fills its container. Without this, it may render with a height of 0, resulting in a blank screen.
