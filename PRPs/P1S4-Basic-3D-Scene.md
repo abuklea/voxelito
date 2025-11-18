@@ -28,6 +28,7 @@ The goal of this PRP is to implement a basic 3D scene using `@react-three/fiber`
 
 2.  **Set up the Canvas:**
     -   The `Viewer` component should return a `<Canvas>` element. This will create the WebGL context and the Three.js scene.
+    -   Add `style={{ height: '100%' }}` to the `<Canvas>` component to ensure it fills its container.
 
 3.  **Add Lighting:**
     -   Inside the `<Canvas>`, add an `<ambientLight>` to provide some general, non-directional light to the entire scene. An intensity of `0.5` is a good starting point.
