@@ -1,11 +1,17 @@
-import './index.css';
+import { Viewer } from './features/viewer/Viewer';
+import { CopilotKit } from '@copilotkit/react-core';
+import { CopilotChat } from '@copilotkit/react-ui';
+import '@copilotkit/react-ui/styles.css';
 
 function App() {
   return (
-    <div className="App">
-      <h1>Voxel Diorama Generator</h1>
-    </div>
-  )
+    <CopilotKit runtimeUrl="/api/generate">
+      <div style={{ height: '100vh', width: '100vw' }}>
+        <Viewer />
+        <CopilotChat />
+      </div>
+    </CopilotKit>
+  );
 }
 
-export default App
+export default App;

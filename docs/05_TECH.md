@@ -46,26 +46,26 @@
 
 ## 1. Executive Summary
 -   **Project Overview:** This document provides the technical specifications for a web-based platform that enables users to generate and edit 3D voxel dioramas through a conversational AI interface.
--   **Key Technical Decisions:** The architecture is a modern, decoupled web application. The frontend is a React SPA for a rich, interactive user experience, utilizing Three.js for high-performance 3D rendering. The backend is a stateless Node.js serverless function, ensuring scalability and security for AI model interactions.
+-   **Key Technical Decisions:** The architecture is a modern, decoupled web application. The frontend is a React SPA for a rich, interactive user experience, utilizing Three.js for high-performance 3D rendering and `ag-ui` for agent interaction. The backend is a Python serverless function using `pydanticAI`, ensuring scalability and security for AI model interactions.
 -   **High-level Architecture Diagram:**
     ```mermaid
     graph TD
         subgraph "User's Browser"
-            A[React SPA] -- Manages --> B(Three.js Canvas);
-            A -- Interacts with --> C{Zustand State Store};
+            A[React SPA with ag-ui] -- Manages --> B(Three.js Canvas);
+            A -- Handles State & Events --> A;
             B -- User Interaction --> D[Raycasting/Controls];
         end
 
         subgraph "Cloud (Vercel)"
-            F[Serverless Function - Node.js] -- Securely Calls --> G[LLM API];
+            F[Serverless Function - Python/FastAPI/pydanticAI] -- Securely Calls --> G[LLM API];
         end
 
-        A -- API Request (HTTPS) --> F;
-        F -- JSON Response --> A;
+        A -- ag-ui Protocol (HTTPS) --> F;
+        F -- ag-ui Event Stream --> A;
     ```
 -   **Technology Stack Recommendations:**
-    -   **Frontend:** React, TypeScript, Vite, Three.js, React Three Fiber, Zustand.
-    -   **Backend:** Node.js, Express (running in a Serverless Function).
+    -   **Frontend:** React, TypeScript, Vite, Three.js, React Three Fiber, `@copilotkit/react-ui`.
+    -   **Backend:** Python, FastAPI, `pydanticAI` (running in a Serverless Function).
     -   **Deployment:** Vercel.
 
 ## 2. System Architecture
@@ -73,7 +73,7 @@
 ### 2.1 Architecture Overview
 The system is composed of two primary components:
 1.  **Client Application:** A Single Page Application (SPA) built with React. It is responsible for all UI, 3D rendering, and client-side state management. It communicates with the backend via a RESTful API.
-2.  **Backend API:** A lightweight, stateless Node.js service. Its sole responsibility is to receive requests from the client, securely communicate with the LLM API, validate the response, and forward it back to the client.
+2.  **Backend API:** A lightweight Python service using `pydanticAI`. Its responsibility is to receive requests from the client via the `ag-ui` protocol, communicate with the LLM API, and stream events back to the client.
 
 ### 2.2 Technology Stack
 -   **Frontend:**
@@ -81,10 +81,10 @@ The system is composed of two primary components:
     -   **Build Tool:** Vite
     -   **Language:** TypeScript
     -   **3D Rendering:** Three.js with React Three Fiber (`@react-three/fiber`) and Drei (`@react-three/drei`) for declarative scene graph and helpful abstractions.
-    -   **State Management:** Zustand for lightweight, centralized state management.
+    -   **State Management & Agent Communication:** `@copilotkit/react-ui` and `@copilotkit/react-core`.
 -   **Backend:**
-    -   **Runtime:** Node.js 20+
-    -   **Framework:** Express.js
+    -   **Runtime:** Python 3.9+
+    -   **Framework:** FastAPI with `pydanticAI`.
 -   **Third-party Services:**
     -   **AI Model:** An API-accessible LLM capable of generating structured JSON (e.g., OpenAI's GPT-4, Google's Gemini).
 
@@ -110,10 +110,10 @@ The system is composed of two primary components:
     -   The component will manage a history of user prompts and AI responses.
     -   It will display a loading state while waiting for the backend response.
 -   **Implementation Approach:**
-    1.  A `ChatPanel` React component will be created.
-    2.  The Zustand store will hold the chat history array.
-    3.  When the user submits a prompt, an async function will be called to `POST` the data to the backend API. During this time, a `isLoading` flag in the store will be set to `true`.
-    4.  Upon receiving a response, the new scene data is updated in the store, and the `isLoading` flag is set to `false`.
+    1.  The main application will be wrapped in a `<CopilotKit>` provider from `@copilotkit/react-core`.
+    2.  The `runtimeUrl` prop will be configured to point to the `/api/generate` backend endpoint.
+    3.  The UI will be composed of `<CopilotChat>` components from `@copilotkit/react-ui`.
+    4.  State management, including message history and loading states, is handled internally by the CopilotKit components.
 
 ### 3.3 Voxel Selection and Editing
 -   **User Stories:** As a user, I want to select a voxel or group of voxels to target my AI commands.
@@ -161,24 +161,8 @@ The system is composed of two primary components:
 
 ### 5.1 Internal APIs
 -   **Endpoint:** `POST /api/generate`
--   **Description:** Takes a user prompt and optional current scene context, and returns a new AI-generated scene description.
--   **Request Body Schema:**
-    ```json
-    {
-      "prompt": "string",
-      "selection": {
-        "voxels": [[number, number, number]]
-      }
-    }
-    ```
--   **Response Schema (Success - 200 OK):**
-    -   Body: `AI_SceneDescription` (as defined in 4.1).
--   **Response (Error - 500 Internal Server Error):**
-    ```json
-    {
-      "error": "Failed to generate scene."
-    }
-    ```
+-   **Description:** Handles communication with the `pydanticAI` agent based on the `ag-ui` protocol.
+-   **Communication Protocol:** The frontend and backend will communicate using the `ag-ui` event-based protocol. The frontend sends user input, and the backend responds with a stream of events (e.g., `message`, `stream_start`, `stream_chunk`, `stream_end`). The structure of these events is defined by the `ag-ui` specification.
 
 ## 6. Security and Privacy
 
@@ -192,7 +176,7 @@ This section directly references the `03_STYLE.md` and `04_UI.md` documents. The
 
 ## 8. Infrastructure and Deployment
 
--   **Infrastructure:** The project will be hosted on Vercel. The backend Node.js/Express app will be configured as a Vercel Serverless Function.
+-   **Infrastructure:** The project will be hosted on Vercel. The backend Python/Flask app will be configured as a Vercel Serverless Function.
 -   **Deployment Strategy:**
     -   A CI/CD pipeline will be automatically configured via the Vercel GitHub integration.
     -   Every push to the `main` branch will trigger a production deployment.

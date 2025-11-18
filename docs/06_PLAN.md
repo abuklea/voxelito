@@ -15,17 +15,17 @@ This document breaks down the technical specifications into a detailed, step-by-
 
 -   **Step 2: Install Core Frontend Dependencies**
     -   **Assignee**: `frontend-architect`
-    -   **Task**: Add and configure the essential libraries for the project: `three`, `@react-three/fiber`, `@react-three/drei`, and `zustand`.
+    -   **Task**: Add and configure the essential libraries for the project: `three`, `@react-three/fiber`, `@react-three/drei`, `@copilotkit/react-ui`, and `@copilotkit/react-core`.
     -   **Files**:
         -   `package.json`: Add new dependencies.
     -   **Step Dependencies**: Step 1.
 
 -   **Step 3: [P] Backend API Setup**
     -   **Assignee**: `backend-engineer`
-    -   **Task**: Create an `api/` directory for the serverless function. Initialize a Node.js project and set up a minimal Express server with a health-check endpoint.
+    -   **Task**: Create an `api/` directory for the serverless function. Set up a minimal Python environment with FastAPI and `pydantic-ai`.
     -   **Files**:
-        -   `api/package.json`: Backend dependencies.
-        -   `api/index.ts`: Express server setup.
+        -   `api/index.py`: FastAPI server setup.
+        -   `api/requirements.txt`: Python dependencies.
         -   `vercel.json`: Configure the serverless function rewrite.
     -   **Step Dependencies**: None.
 
@@ -37,21 +37,20 @@ This document breaks down the technical specifications into a detailed, step-by-
         -   `src/features/viewer/Viewer.tsx`: The component responsible for the 3D scene.
     -   **Step Dependencies**: Step 2.
 
--   **Step 5: State Management (Zustand)**
+-   **Step 5: Chat UI Setup (CopilotKit)**
     -   **Assignee**: `frontend-architect`
-    -   **Task**: Create the main Zustand store. Define the initial state shape, including slices for `sceneState`, `chatState`, and `uiState`.
+    -   **Task**: Implement the CopilotKit chat components (`<CopilotKit>`, `<CopilotChat>`) in the main application component. Configure the `runtimeUrl` to communicate with the backend.
     -   **Files**:
-        -   `src/store/useStore.ts`: The main Zustand store definition.
-        -   `src/types/State.ts`: TypeScript types for the store.
+        -   `src/App.tsx`: Integrate CopilotKit components.
     -   **Step Dependencies**: Step 2.
 
 ## Phase 2: Voxel Engine and API Development
 
 -   **Step 6: [P] Core API Endpoint (`/api/generate`)**
     -   **Assignee**: `backend-engineer`
-    -   **Task**: Implement the `POST /api/generate` endpoint. It should accept a `prompt` in the request body and, for now, return a mocked, static `AI_SceneDescription` JSON object.
+    -   **Task**: Implement the `POST /api/generate` endpoint in the FastAPI application. This endpoint will receive requests from the `ag-ui` frontend, pass the prompt to a `pydanticAI` agent, and stream events back to the client according to the `ag-ui` protocol.
     -   **Files**:
-        -   `api/index.ts`: Add the new route handler.
+        -   `api/index.py`: Add the route handler.
     -   **Step Dependencies**: Step 3.
 
 -   **Step 7: Voxel Data Structures**
@@ -75,45 +74,28 @@ This document breaks down the technical specifications into a detailed, step-by-
     -   **Files**:
         -   `src/features/voxel-engine/SceneManager.tsx`: A React component that orchestrates the voxel rendering.
         -   `src/hooks/useVoxelMesher.ts`: A custom hook to manage the interaction with the meshing worker.
-    -   **Step Dependencies**: Step 5, Step 8.
+    -   **Step Dependencies**: Step 8.
 
 ## Phase 3: UI and Feature Integration
 
--   **Step 10: Chat Panel UI Component**
-    -   **Assignee**: `frontend-architect`
-    -   **Task**: Build the `ChatPanel` React component based on the style guide. It should display a message history and an input field. Initially, it will only interact with the client-side Zustand store.
-    -   **Files**:
-        -   `src/features/chat/ChatPanel.tsx`: The main chat UI component.
-        -   `src/features/chat/ChatMessage.tsx`: Component for a single message.
-    -   **Step Dependencies**: Step 5.
-
--   **Step 11: Connect Chat UI to Backend**
-    -   **Assignee**: `frontend-architect`
-    -   **Task**: Wire the `ChatPanel`'s form submission to an API client function that calls the `/api/generate` endpoint. Manage the `isLoading` state in Zustand.
-    -   **Files**:
-        -   `src/lib/apiClient.ts`: A module for making API calls.
-        -   `src/features/chat/ChatPanel.tsx`: Update to call the API on submit.
-    -   **Step Dependencies**: Step 6, Step 10.
-
--   **Step 12: [P] Backend LLM Integration**
+-   **Step 10: [P] Backend LLM Integration**
     -   **Assignee**: `backend-engineer`
-    -   **Task**: Replace the mock data in the `/api/generate` endpoint with a real call to the selected LLM API. Implement secure API key management using environment variables. Add response validation.
+    -   **Task**: Integrate a real LLM with the `pydanticAI` agent in the backend. Implement secure API key management using environment variables. Add response validation and error handling.
     -   **Files**:
-        -   `api/index.ts`: Update the route handler to call the LLM.
+        -   `api/index.py`: Update the agent to call the LLM.
         -   `.env.local`: For local development API key.
     -   **Step Dependencies**: Step 6.
 
--   **Step 13: Voxelization of AI Response**
+-   **Step 11: Voxelization of AI Response**
     -   **Assignee**: `3d-specialist`
-    -   **Task**: Create a utility function that takes the `AI_SceneDescription` JSON from the backend and translates it into the client-side `VoxelScene` data format. Update the Zustand store with this new scene data.
+    -   **Task**: Create a utility function that takes the `AI_SceneDescription` from the backend events and translates it into the client-side `VoxelScene` data format. Update the scene data based on the events received from the `ag-ui` stream.
     -   **Files**:
         -   `src/features/voxel-engine/voxelizer.ts`: The translation utility.
-        -   `src/store/useStore.ts`: Add an action to update the scene from an AI description.
-    -   **Step Dependencies**: Step 7, Step 11.
+    -   **Step Dependencies**: Step 7, Step 10.
 
--   **Step 14: Raycasting for Voxel Selection**
+-   **Step 12: Raycasting for Voxel Selection**
     -   **Assignee**: `3d-specialist`
-    -   **Task**: Implement `onPointerDown` event handling on the voxel meshes to perform raycasting. Calculate the intersected voxel coordinates and update the `selection` state in the Zustand store.
+    -   **Task**: Implement `onPointerDown` event handling on the voxel meshes to perform raycasting. Calculate the intersected voxel coordinates and send the selection to the backend via the `ag-ui` agent.
     -   **Files**:
         -   `src/features/viewer/InteractionController.tsx`: A component to manage scene interactions.
     -   **Step Dependencies**: Step 9.
