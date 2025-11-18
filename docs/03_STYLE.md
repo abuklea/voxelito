@@ -1,0 +1,88 @@
+# Voxel Diorama Generator - Style Guide
+
+This style guide defines the visual identity for the Voxel Diorama Generator, ensuring a cohesive, intuitive, and modern user experience. The aesthetic is minimalist and futuristic, designed to keep the focus on the user's 3D creations.
+
+- **Color Palette**
+    - **Primary Colors**
+        - **Primary Blue** - `#007BFF` (Used for primary buttons, active UI elements, and key interactions)
+        - **Pure White** - `#FFFFFF` (Used for primary text and bright icons)
+    - **Secondary Colors**
+        - **Light Grey** - `#ADB5BD` (For secondary text, labels, and inactive UI elements)
+        - **Medium Grey** - `#495057` (For borders and dividers)
+    - **Accent Colors**
+        - **Accent Magenta** - `#E000FF` (For voxel selection highlights, notifications, and loading indicators)
+        - **Accent Cyan** - `#00F6FF` (For hover states and secondary highlights)
+    - **Functional Colors**
+        - **Success Green** - `#28A745` (For success messages and confirmations)
+        - **Error Red** - `#DC3545` (For error messages and destructive actions)
+    - **Background Colors**
+        - **Primary Dark** - `#121212` (The main app background, creating a dark, focused environment)
+        - **Surface Dark** - `#1E1E1E` (For the base of UI panels and cards)
+        - **Glassmorphism Panel** - `rgba(30, 30, 30, 0.75)` (Semi-transparent background for the floating chat panel, with a backdrop blur effect)
+
+- **Typography**
+    - **Font Family**
+        - **Primary Font:** Inter (A clean, modern sans-serif font for all UI text)
+    - **Font Weights**
+        - **Regular:** 400
+        - **Medium:** 500
+        - **Semibold:** 600
+    - **Text Styles**
+        - **Headings**
+            - **H1:** 24px/32px, Semibold (For major UI titles, e.g., "Chat")
+            - **H2:** 20px/28px, Medium (For section headers)
+        - **Body Text**
+            - **Body:** 16px/24px, Regular (Standard text for chat messages and descriptions)
+            - **Body Small:** 14px/20px, Regular (For secondary information and UI labels)
+        - **Special Text**
+            - **Button Text:** 16px/24px, Medium (Used for all buttons)
+            - **Input Text:** 16px/24px, Regular (For text inside input fields)
+
+- **Component Styling**
+    - **Buttons**
+        - **Primary Button**
+            - Background: Primary Blue (`#007BFF`)
+            - Text: Pure White (`#FFFFFF`)
+            - Height: 44dp
+            - Corner Radius: 8dp
+            - Padding: 16dp horizontal
+            - Hover State: Slightly lighter blue background
+        - **Secondary Button**
+            - Border: 1.5dp Medium Grey (`#495057`)
+            - Text: Light Grey (`#ADB5BD`)
+            - Background: Transparent
+            - Height: 44dp
+            - Corner Radius: 8dp
+            - Hover State: Border and text change to Accent Cyan (`#00F6FF`)
+    - **Chat Panel**
+        - Background: Glassmorphism Panel (`rgba(30, 30, 30, 0.75)`)
+        - Border: 1dp `rgba(73, 80, 87, 0.5)`
+        - Shadow: Subtle glow using Accent Cyan on focus
+        - Corner Radius: 12dp
+        - Padding: 16dp
+    - **Input Fields (Chat Input)**
+        - Height: 52dp
+        - Corner Radius: 8dp
+        - Border: 1dp Medium Grey (`#495057`)
+        - Active Border: 2dp Primary Blue (`#007BFF`)
+        - Background: Surface Dark (`#1E1E1E`)
+        - Text: Pure White (`#FFFFFF`)
+        - Placeholder Text: Light Grey (`#ADB5BD`)
+    - **Icons**
+        - **Size:** 24dp x 24dp
+        - **Color (Interactive):** Pure White (`#FFFFFF`)
+        - **Color (Inactive):** Light Grey (`#ADB5BD`)
+        - **Hover State:** Accent Cyan (`#00F6FF`)
+
+- **Spacing System**
+    - **4dp** - Micro spacing (e.g., between an icon and its text)
+    - **8dp** - Small spacing (internal padding for small elements)
+    - **16dp** - Default spacing (standard margins and padding for components like the chat panel)
+    - **24dp** - Medium spacing (between distinct UI sections)
+    - **32dp** - Large spacing (major layout divisions)
+
+- **Motion & Animation**
+    - **Standard Transition:** 250ms, Ease-in-out (For UI element state changes like button hovers)
+    - **Panel Transition:** 350ms, Ease-out (For collapsing/expanding the chat panel)
+    - **Voxel Highlight:** A subtle, pulsating glow effect using Accent Magenta (`#E000FF`) on selected voxels.
+    - **Loading Indicator:** A smoothly animating voxel or geometric shape using the Accent Magenta color.
