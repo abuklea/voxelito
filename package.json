@@ -1,0 +1,22 @@
+{
+  "name": "voxelito",
+  "version": "1.0.0",
+  "description": "A Three.js + TypeScript voxel project",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["threejs", "typescript", "voxel", "3d"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/three": "^0.181.0",
+    "three": "^0.181.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2"
+  }
+}
