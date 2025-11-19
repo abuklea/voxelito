@@ -47,6 +47,7 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 5:** Chat UI Setup (CopilotKit)
 -   **[ ] Phase 2: Voxel Engine and API Development**
     -   **[✓] Step 7:** Core API Endpoint (`/api/generate`)
+    -   **[✓] Step 8:** Voxel Data Structures
 -   **[ ] Phase 3: UI and Feature Integration**
 -   **[ ] Phase 4: Finalization and Deployment**
 
@@ -71,3 +72,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 ### 5.5. Backend API
 -   The backend exposes a single endpoint for the AI agent at `/api/generate`, as defined in `api/index.py`.
 -   The `.gitignore` file is configured to exclude Python-specific generated files like `__pycache__/`.
+
+### 5.6. Voxel Engine Data Structures
+-   The core data structures for the voxel engine are defined in `src/features/voxel-engine/`.
+-   `types.ts` contains the TypeScript interfaces and type definitions (e.g., `Voxel`, `Chunk`, `SceneData`).
+-   `palette.ts` defines the initial `VoxelPalette`, which maps voxel types to their properties (e.g., color).
