@@ -48,6 +48,7 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   **[ ] Phase 2: Voxel Engine and API Development**
     -   **[✓] Step 7:** Core API Endpoint (`/api/generate`)
     -   **[✓] Step 8:** Voxel Data Structures
+    -   **[✓] Step 9:** Voxel Meshing Web Worker
 -   **[ ] Phase 3: UI and Feature Integration**
 -   **[ ] Phase 4: Finalization and Deployment**
 
@@ -77,3 +78,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   The core data structures for the voxel engine are defined in `src/features/voxel-engine/`.
 -   `types.ts` contains the TypeScript interfaces and type definitions (e.g., `Voxel`, `Chunk`, `SceneData`).
 -   `palette.ts` defines the initial `VoxelPalette`, which maps voxel types to their properties (e.g., color).
+
+### 5.7. Voxel Meshing Web Worker
+-   The greedy meshing algorithm, a computationally intensive task, is offloaded to a Web Worker to prevent blocking the main UI thread.
+-   The worker script is located at `public/workers/greedy-mesher.worker.ts`.
+-   To ensure high performance, geometry data (vertices and indices) is sent from the worker to the main thread using `Transferable` objects (`ArrayBuffer`), which avoids the overhead of cloning large data sets.
