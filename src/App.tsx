@@ -5,7 +5,7 @@ import "@copilotkit/react-ui/styles.css";
 
 function App() {
   return (
-    <CopilotKit runtimeUrl="/api">
+    <CopilotKit runtimeUrl="/api/generate">
       <div style={{ height: "100vh", width: "100vw" }}>
         <Viewer />
         <CopilotChat />

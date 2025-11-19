@@ -61,8 +61,12 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   The screenshot is then visually inspected to confirm the changes are correct.
 
 ### 5.3. Vite Configuration
--   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5.
--   The configuration is `define: { 'process.env': {} }`.
+-   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5. The configuration is `define: { 'process.env': {} }`.
+-   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`. This avoids CORS issues and simplifies frontend code.
 
 ### 5.4. Canvas Rendering
 -   The `@react-three/fiber` `<Canvas>` component requires a `style` prop (e.g., `style={{ height: '100%' }}`) to ensure it renders correctly and fills its container. Without this, it may render with a height of 0, resulting in a blank screen.
+
+### 5.5. Backend API
+-   The backend exposes a single endpoint for the AI agent at `/api/generate`, as defined in `api/index.py`.
+-   The `.gitignore` file is configured to exclude Python-specific generated files like `__pycache__/`.
