@@ -1,10 +1,10 @@
-# Voxel Diorama Generator - Style Guide
+# Voxelito - Style Guide
 
-This style guide defines the visual identity for the Voxel Diorama Generator, ensuring a cohesive, intuitive, and modern user experience. The aesthetic is minimalist and futuristic, designed to keep the focus on the user's 3D creations.
+This style guide defines the visual identity for Voxelito, ensuring a cohesive, intuitive, and fun user experience. The aesthetic is retro-pixel art, designed to be fun, quirky, and slightly-mysterious.
 
 - **Color Palette**
     - **Primary Colors**
-        - **Primary Blue** - `#007BFF` (Used for primary buttons, active UI elements, and key interactions)
+        - **Primary Purple** - `#2E0A5F` (Used for primary buttons, active UI elements, and key interactions)
         - **Pure White** - `#FFFFFF` (Used for primary text and bright icons)
     - **Secondary Colors**
         - **Light Grey** - `#ADB5BD` (For secondary text, labels, and inactive UI elements)
@@ -22,49 +22,47 @@ This style guide defines the visual identity for the Voxel Diorama Generator, en
 
 - **Typography**
     - **Font Family**
-        - **Primary Font:** Inter (A clean, modern sans-serif font for all UI text)
+        - **Primary Font:** "Press Start 2P", cursive (A pixelated font for all UI text)
     - **Font Weights**
         - **Regular:** 400
-        - **Medium:** 500
-        - **Semibold:** 600
     - **Text Styles**
         - **Headings**
-            - **H1:** 24px/32px, Semibold (For major UI titles, e.g., "Chat")
-            - **H2:** 20px/28px, Medium (For section headers)
+            - **H1:** 24px/32px, (For major UI titles, e.g., "Chat")
+            - **H2:** 20px/28px, (For section headers)
         - **Body Text**
-            - **Body:** 16px/24px, Regular (Standard text for chat messages and descriptions)
-            - **Body Small:** 14px/20px, Regular (For secondary information and UI labels)
+            - **Body:** 16px/24px, (Standard text for chat messages and descriptions)
+            - **Body Small:** 14px/20px, (For secondary information and UI labels)
         - **Special Text**
-            - **Button Text:** 16px/24px, Medium (Used for all buttons)
-            - **Input Text:** 16px/24px, Regular (For text inside input fields)
+            - **Button Text:** 16px/24px, (Used for all buttons)
+            - **Input Text:** 16px/24px, (For text inside input fields)
 
 - **Component Styling**
     - **Buttons**
         - **Primary Button**
-            - Background: Primary Blue (`#007BFF`)
+            - Background: Primary Purple (`#2E0A5F`)
             - Text: Pure White (`#FFFFFF`)
             - Height: 44dp
-            - Corner Radius: 8dp
+            - Corner Radius: 0dp
             - Padding: 16dp horizontal
-            - Hover State: Slightly lighter blue background
+            - Hover State: Slightly lighter purple background
         - **Secondary Button**
             - Border: 1.5dp Medium Grey (`#495057`)
             - Text: Light Grey (`#ADB5BD`)
             - Background: Transparent
             - Height: 44dp
-            - Corner Radius: 8dp
+            - Corner Radius: 0dp
             - Hover State: Border and text change to Accent Cyan (`#00F6FF`)
     - **Chat Panel**
         - Background: Glassmorphism Panel (`rgba(30, 30, 30, 0.75)`)
         - Border: 1dp `rgba(73, 80, 87, 0.5)`
         - Shadow: Subtle glow using Accent Cyan on focus
-        - Corner Radius: 12dp
+        - Corner Radius: 0dp
         - Padding: 16dp
     - **Input Fields (Chat Input)**
         - Height: 52dp
-        - Corner Radius: 8dp
+        - Corner Radius: 0dp
         - Border: 1dp Medium Grey (`#495057`)
-        - Active Border: 2dp Primary Blue (`#007BFF`)
+        - Active Border: 2dp Primary Purple (`#2E0A5F`)
         - Background: Surface Dark (`#1E1E1E`)
         - Text: Pure White (`#FFFFFF`)
         - Placeholder Text: Light Grey (`#ADB5BD`)
