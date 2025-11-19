@@ -51,6 +51,14 @@ This document breaks down the technical specifications into a detailed, step-by-
         -   `docs/03_STYLE.md`: Update the style guide.
     -   **Step Dependencies**: Step 5.
 
+-   **Step 6b: Implement Retro-Pixel Art UI**
+    -   **Assignee**: `frontend-developer`
+    -   **Task**: Following the STYLE document created in PRP P1S6, update the existing project, and update the UI, to integrate/implement the required UI changes, for the app to reflect a similar retro-pixel art vibe, and this pixel visual style for the 'voxelito' app UI and art design, that can be seen in the provided screenshots for an unrelated website; with a cool retro style. Use these images as inspiration to envisage and develop a fun, quirky, slightly-mysterious, pixel-art vibe, and a consistent application of this amazing design system across the 'voxelito' app and all ui pages, elements, and components. Use modern css techniques to produce an optimal, performant, and visually cool design for the platform.
+    -   **Files**:
+        -   `src/index.css`: Apply global styles.
+        -   `src/App.tsx`: Update component styles.
+    -   **Step Dependencies**: Step 6.
+
 ## Phase 2: Voxel Engine and API Development
 
 -   **Step 7: [P] Core API Endpoint (`/api/generate`)**
