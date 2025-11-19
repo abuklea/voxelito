@@ -46,6 +46,7 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 4:** Basic 3D Scene Setup
     -   **[✓] Step 5:** Chat UI Setup (CopilotKit)
 -   **[ ] Phase 2: Voxel Engine and API Development**
+    -   **[✓] Step 7:** Core API Endpoint (`/api/generate`)
 -   **[ ] Phase 3: UI and Feature Integration**
 -   **[ ] Phase 4: Finalization and Deployment**
 
