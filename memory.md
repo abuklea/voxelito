@@ -26,8 +26,8 @@ graph TD
 
 ## 3. Technology Stack
 -   **Frontend:**
-    -   **Framework:** React 19 (with Vite and TypeScript)
-    -   **3D Rendering:** `three`, `@react-three/fiber`, `@react-three/drei`
+    -   **Framework:** React 18 (with Vite and TypeScript)
+    -   **3D Rendering:** `three`
     -   **Agent Communication:** `@copilotkit/react-core`, `@copilotkit/react-ui`
 -   **Backend:**
     -   **Runtime:** Python 3.9+
@@ -45,10 +45,12 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 3:** Backend API Setup
     -   **[✓] Step 4:** Basic 3D Scene Setup
     -   **[✓] Step 5:** Chat UI Setup (CopilotKit)
--   **[ ] Phase 2: Voxel Engine and API Development**
+-   **[✓] Phase 2: Voxel Engine and API Development**
     -   **[✓] Step 7:** Core API Endpoint (`/api/generate`)
     -   **[✓] Step 8:** Voxel Data Structures
     -   **[✓] Step 9:** Voxel Meshing Web Worker
+    -   **[✓] Step 10:** Voxel Scene Manager
+    -   **[✓] Step 10b:** Fix Silent Rendering Failure
 -   **[ ] Phase 3: UI and Feature Integration**
 -   **[ ] Phase 4: Finalization and Deployment**
 
@@ -66,20 +68,16 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 ### 5.3. Vite Configuration
 -   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5. The configuration is `define: { 'process.env': {} }`.
 -   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`. This avoids CORS issues and simplifies frontend code.
+-   Vite's cache may need to be cleared (`npm run dev -- --force`) after major configuration changes, such as modifying how TypeScript types are imported, to avoid persistent module resolution errors.
 
-### 5.4. Canvas Rendering
--   The `@react-three/fiber` `<Canvas>` component requires a `style` prop (e.g., `style={{ height: '100%' }}`) to ensure it renders correctly and fills its container. Without this, it may render with a height of 0, resulting in a blank screen.
+### 5.4. React & Three.js Integration
+-   **Suspense Deadlock:** A React component that triggers Suspense (e.g., by dynamically loading a worker) must be wrapped in a `<Suspense>` boundary. Failure to do so can cause the entire application to suspend its rendering process, resulting in a silent failure (blank screen).
+-   **Callback Refs for Imperative Libraries:** When integrating imperative libraries like `three.js` that need a reference to a DOM element, the `useCallback` (callback ref) pattern is more reliable than `useRef` and `useEffect`. A callback ref guarantees that the initialization logic runs as soon as the DOM node is available, avoiding timing issues where `ref.current` might be `null`.
 
-### 5.5. Backend API
--   The backend exposes a single endpoint for the AI agent at `/api/generate`, as defined in `api/index.py`.
--   The `.gitignore` file is configured to exclude Python-specific generated files like `__pycache__/`.
+### 5.5. TypeScript and Vite
+-   **Type-Only Imports:** When a file exports only TypeScript `interface`s or `type`s, it must be imported using `import type`. These constructs are erased during compilation, so a standard `import` will fail at runtime because the module has no exports.
+-   **Web Workers:** TypeScript-based Web Workers must be placed in the `src` directory to be compiled by Vite. They should be instantiated using the `new URL(...)` pattern: `new Worker(new URL('../path/to/worker.ts', import.meta.url), { type: 'module' });`.
 
-### 5.6. Voxel Engine Data Structures
--   The core data structures for the voxel engine are defined in `src/features/voxel-engine/`.
--   `types.ts` contains the TypeScript interfaces and type definitions (e.g., `Voxel`, `Chunk`, `SceneData`).
--   `palette.ts` defines the initial `VoxelPalette`, which maps voxel types to their properties (e.g., color).
-
-### 5.7. Voxel Meshing Web Worker
--   The greedy meshing algorithm, a computationally intensive task, is offloaded to a Web Worker to prevent blocking the main UI thread.
--   The worker script is located at `public/workers/greedy-mesher.worker.ts`.
--   To ensure high performance, geometry data (vertices and indices) is sent from the worker to the main thread using `Transferable` objects (`ArrayBuffer`), which avoids the overhead of cloning large data sets.
+### 5.6. Voxel Engine
+-   The core data structures for the voxel engine are defined in `src/types.ts`.
+-   The computationally intensive greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
