@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useVoxelMesher } from '../../hooks/useVoxelMesher';
 import { VoxelWorld } from '../../lib/VoxelWorld';
-import { SceneData, VoxelType } from '../../types';
+import type { SceneData, VoxelType } from '../../types';
 
 const voxelTypeMap: Record<VoxelType, number> = {
   air: 0,

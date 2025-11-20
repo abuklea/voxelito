@@ -1,4 +1,4 @@
-import { VoxelChunkData } from '../types';
+import type { VoxelChunkData } from '../types';
 
 self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
     const { chunkData, dimensions } = event.data;
