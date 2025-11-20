@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
-import { Voxel, SceneData } from './types';
+import type { Voxel, SceneData } from './types';
 
 const voxels: Voxel[] = new Array(32 * 32 * 32).fill({ type: "air" });
 voxels[0] = { type: "stone" };
