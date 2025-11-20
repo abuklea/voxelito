@@ -1,9 +1,4 @@
-// public/workers/greedy-mesher.worker.ts
-
-interface VoxelChunkData {
-    chunkData: Uint8Array;
-    dimensions: [number, number, number];
-}
+import { VoxelChunkData } from '../types';
 
 self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
     const { chunkData, dimensions } = event.data;
@@ -126,5 +121,6 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
     self.postMessage({
         vertices: verticesArray,
         indices: indicesArray,
+        chunkId: event.data.chunkId,
     }, [verticesArray.buffer, indicesArray.buffer]);
 };

@@ -10,7 +10,7 @@ export const useVoxelMesher = (onMeshComplete: (chunkId: string, meshData: MeshD
 
   useEffect(() => {
     console.log("Initializing voxel mesher worker...");
-    workerRef.current = new Worker(new URL('/workers/greedy-mesher.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = new Worker(new URL('../workers/greedy-mesher.worker.ts', import.meta.url), { type: 'module' });
 
     workerRef.current.onmessage = (event) => {
       console.log("Received message from worker:", event.data);

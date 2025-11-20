@@ -13,4 +13,8 @@ export interface SceneData {
   chunks: Chunk[];
 }
 
-export type VoxelPalette = Record<VoxelType, { color: string }>;
+export interface VoxelChunkData {
+  chunkData: Uint8Array;
+  dimensions: [number, number, number];
+  chunkId: string;
+}
