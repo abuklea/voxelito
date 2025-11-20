@@ -2,7 +2,6 @@ export type VoxelType = "air" | "grass" | "stone" | "dirt";
 
 export interface Voxel {
   type: VoxelType;
-  // Add other voxel properties here, e.g., lighting, transparency
 }
 
 export interface Chunk {
