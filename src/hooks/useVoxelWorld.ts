@@ -1,19 +1,21 @@
-import { useEffect, useState, RefObject } from 'react';
+import { useState, useCallback } from 'react';
 import { VoxelWorld } from '../lib/VoxelWorld';
 
-export const useVoxelWorld = (ref: RefObject<HTMLDivElement>) => {
+export const useVoxelWorld = () => {
   const [voxelWorld, setVoxelWorld] = useState<VoxelWorld | null>(null);
 
-  useEffect(() => {
-    if (ref.current) {
-      const world = new VoxelWorld(ref.current);
+  // Using a callback ref ensures code runs exactly when the DOM element is created
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (node !== null) {
+      const world = new VoxelWorld(node);
       setVoxelWorld(world);
 
+      // Cleanup when the node is removed
       return () => {
         world.dispose();
       };
     }
-  }, [ref]);
+  }, []);
 
-  return voxelWorld;
+  return { voxelWorld, ref };
 };

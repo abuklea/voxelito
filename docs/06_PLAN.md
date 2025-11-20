@@ -91,6 +91,13 @@ This document breaks down the technical specifications into a detailed, step-by-
         -   `src/hooks/useVoxelMesher.ts`: A custom hook to manage the interaction with the meshing worker.
     -   **Step Dependencies**: Step 9.
 
+-   **Step 10b: Fix Silent Rendering Failure**
+    -   **Assignee**: `3d-specialist`
+    -   **Task**: Resolve the silent rendering failure caused by a React Suspense deadlock. This involves wrapping the `SceneManager` component in a `<Suspense>` boundary in `src/App.tsx` to allow the main `Viewer` component to render and initialize the `three.js` canvas correctly.
+    -   **Files**:
+        -   `src/App.tsx`: Apply the `<Suspense>` boundary.
+    -   **Step Dependencies**: Step 10.
+
 ## Phase 3: UI and Feature Integration
 
 -   **Step 11: [P] Backend LLM Integration**
