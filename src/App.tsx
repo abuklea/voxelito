@@ -1,12 +1,34 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
-import { CopilotChat } from "@copilotkit/react-ui";
+import { CopilotPopup } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
 import type { SceneData } from './types';
-import ErrorBoundary from './ErrorBoundary'; // Import the ErrorBoundary
+import ErrorBoundary from './ErrorBoundary';
+import { NeonLogo } from './components/NeonLogo';
 import "@copilotkit/react-ui/styles.css";
+
+// Header Component
+const Header = () => (
+  <header style={{
+    height: '80px', // Increased height for the neon sign
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-color)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 20px',
+    boxSizing: 'border-box',
+    justifyContent: 'space-between'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <NeonLogo />
+    </div>
+    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+      ALPHA BUILD
+    </div>
+  </header>
+);
 
 function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
@@ -18,30 +40,40 @@ function VoxelApp() {
     if (!isLoading && visibleMessages.length > 0) {
       const lastMessage = visibleMessages[visibleMessages.length - 1];
 
-      if (lastMessage.role === "assistant" && lastMessage.content) {
+      if (lastMessage.isTextMessage() && lastMessage.role === "assistant" && lastMessage.content) {
         try {
           const parsed = JSON.parse(lastMessage.content);
-
           if (parsed && Array.isArray(parsed.chunks)) {
             console.log("Valid scene data received, updating viewer...");
             setSceneData(parsed as SceneData);
+          } else {
+            console.log("Received JSON but not valid scene data:", parsed);
           }
         } catch (e) {
-          // console.debug("Last message was not valid JSON scene data");
+           console.log("Last message content was not JSON:", lastMessage.content);
         }
       }
     }
   }, [isLoading, visibleMessages]);
 
   return (
-    <div style={{ height: "100vh", width: "100vw" }}>
-      <Viewer ref={ref} />
-      <Suspense fallback={<div>Loading Voxel Engine...</div>}>
-        {voxelWorld && sceneData && (
-          <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
-        )}
-      </Suspense>
-      <CopilotChat />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-primary)' }}>
+      <Header />
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <Viewer ref={ref} />
+        <Suspense fallback={<div style={{ color: 'white', padding: '20px' }}>Loading Voxel Engine...</div>}>
+          {voxelWorld && sceneData && (
+            <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
+          )}
+        </Suspense>
+      </div>
+      <CopilotPopup
+        instructions="You are a helper that generates 3D voxel scenes."
+        labels={{
+          title: "Voxelito",
+          initial: "Describe a scene to generate!",
+        }}
+      />
     </div>
   );
 }
