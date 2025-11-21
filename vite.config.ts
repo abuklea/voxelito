@@ -14,5 +14,8 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }
+  },
+  test: {
+    exclude: ['**/e2e/**', '**/node_modules/**', '**/dist/**', '**/cypress/**', '**/.{idea,git,cache,output,temp}/**', 'verify.spec.js'],
+  },
 })
