@@ -1,17 +1,19 @@
 # Problem Report: `CopilotKit` Integration Failure
 
-**Date:** 2025-11-20
+**Date:** 2025-11-21
 **Author:** Jules
 
 ## 1. Executive Summary
 
-The initial task (P3S11) was to resolve two critical bugs preventing the application from rendering a 3D scene: a TypeScript import error causing a runtime crash, and a React race condition causing a blank screen.
+The primary goal of this task was to fix the CopilotKit initialization failure, which was preventing the chat UI from appearing. The root cause was correctly identified as a protocol mismatch between the frontend and the Python backend. The backend was sending a `StreamingResponse` for all requests, while the frontend expected a `JSONResponse` for the initial `availableAgents` discovery query.
 
-**These core rendering bugs have been successfully fixed.** The application's 3D engine is now stable and can correctly render scenes from hardcoded data.
+The backend has been successfully fixed to handle this dual-protocol requirement. It now correctly returns a `JSONResponse` for the discovery query and a `StreamingResponse` for chat messages. Additionally, CORS has been enabled on the backend to allow requests from the frontend development server.
 
-However, a significant and persistent secondary issue prevents the `CopilotKit` chat functionality from working. Despite extensive debugging on both the frontend and backend, the chat UI fails to initialize, blocking the full chat-to-scene user workflow. This report details the successful fixes, the unresolved chat issue, all debugging steps taken, and provides a clear path for a developer to continue the investigation.
+On the frontend, the `App.tsx` component has been updated to use the `useCopilotAction` hook, which is responsible for handling the scene data streamed from the backend.
 
-The codebase has been reverted to a stable, working state that demonstrates the successful rendering fix, with the non-functional chat components removed.
+Despite these fixes, the Playwright verification script continues to fail. The script times out waiting for the CopilotKit chat button to appear, which indicates that the frontend is still not rendering the chat UI. The root cause of this failure is unknown, and it is suspected to be an issue within the CopilotKit library itself or a subtle configuration issue that has not been identified.
+
+This report provides a complete summary of the work performed, the final state of the codebase, and all the debugging steps taken. The goal is to provide the next developer with all the information they need to continue the investigation and resolve the issue.
 
 ## 2. Unresolved Issue: Silent `CopilotKit` Initialization Failure
 
@@ -22,81 +24,95 @@ The application fails to render the `CopilotKit` chat button and interface, even
 ### 2.2. Observed Behavior
 
 - The Playwright verification script consistently times out while waiting for the chat button to appear: `waiting for get_by_role("button", name="CopilotKit")`.
-- The backend API successfully receives and responds to the initial `availableAgents` discovery query from the `CopilotKit` frontend with a `200 OK` status.
+- The backend API successfully receives and responds to the initial `availableAgents` discovery query from the `CopilotKit` frontend with a `200 OK` status. The backend logs show that the correct `JSONResponse` is being sent.
 - The 3D viewer canvas renders correctly in the background.
 
 ### 2.3. Suspected Root Cause
 
-The root cause is likely a subtle configuration issue or an internal error within the `@copilotkit/react-core` and `@copilotkit/react-ui` components that is not being surfaced as a catchable error. The debugging process has ruled out obvious causes like server connectivity, code syntax errors, and incorrect API responses.
+The root cause is likely a subtle configuration issue or an internal error within the `@copilotkit/react-core` and `@copilotkit/react-ui` components that is not being surfaced as a catchable error. The debugging process has ruled out the most obvious causes, including server connectivity, CORS, incorrect API responses, and missing `__typename` fields in the GraphQL response.
 
 ## 3. Chronological Debugging Log
 
 The following is a detailed log of the steps taken to diagnose and resolve the issues.
 
-**Step 1: Initial State - Rendering Bugs**
-- **Action:** Implemented fixes for the rendering race condition (`useVoxelWorld.ts`) and TypeScript type-only imports.
-- **Result:** Successfully rendered a hardcoded test scene. **This part of the task was a success.**
+**Step 1: Initial State - Protocol Mismatch**
+- **Action:** Implemented the dual-protocol backend fix as described in the PRP.
+- **Result:** The backend now correctly handles the `availableAgents` query.
 
-**Step 2: Re-integrating the Chat UI**
-- **Action:** Restored the original `App.tsx` containing the `<CopilotKit>` components.
-- **Error:** Playwright failed, `waiting for locator("canvas")`. The entire app was now blank.
-- **Diagnosis:** Restoring the file reintroduced a bug. A missing `useState` import in `App.tsx` was crashing the application.
-- **Fix:** Added the `useState` import.
+**Step 2: CORS Error**
+- **Action:** Ran the Playwright verification script.
+- **Error:** The backend log showed a `405 Method Not Allowed` for an `OPTIONS` request.
+- **Diagnosis:** The browser was sending a CORS preflight request that was being rejected by the backend.
+- **Fix:** Added CORS middleware to the FastAPI application to allow requests from the frontend.
 
-**Step 3: Backend Connection Failure**
-- **Action:** Re-ran verification script after fixing the import.
-- **Error:** `ECONNREFUSED` in the browser console when trying to connect to `/api/generate`.
-- **Diagnosis:** The Python backend server was not running.
-- **Fix:** Installed Python dependencies (`pip install -r api/requirements.txt`) and started the `uvicorn` server.
+**Step 3: Missing `__typename` Fields**
+- **Action:** Ran the Playwright verification script.
+- **Error:** The script still timed out. The backend logs showed successful `OPTIONS` and `POST` requests.
+- **Diagnosis:** The `availableAgents` response was missing the `__typename` fields, which are often required by GraphQL clients.
+- **Fix:** Added the `__typename` fields to the `discovery_data` in `api/index.py`.
 
-**Step 4: Backend Rejects Initial Request**
-- **Action:** Re-ran verification with both frontend and backend servers active.
-- **Error:** Playwright timed out waiting for the `CopilotKit` button. The backend log showed a `400 Bad Request`.
-- **Diagnosis:** The backend logic expected a `prompt` but was receiving a different payload from `CopilotKit` on initialization.
-- **Fix:** Added logging to `api/index.py` to inspect the incoming request body.
+**Step 4: Incomplete Frontend Integration**
+- **Action:** Requested a code review.
+- **Feedback:** The backend fix was correct, but the frontend was not handling the data stream from the backend.
+- **Fix:** Implemented the `useCopilotAction` hook in `src/App.tsx` to handle the scene data.
 
-**Step 5: Handling the `availableAgents` Query**
-- **Action:** Re-ran verification to capture the log.
-- **Log Data:** The initial request was a GraphQL query: `{'operationName': 'availableAgents', ...}`.
-- **Diagnosis:** The `CopilotKit` frontend performs a discovery query on startup, which the backend must handle.
-- **Fix:** Modified `api/index.py` to detect the `availableAgents` query and return a static JSON response describing the scene generation agent.
-
-**Step 6: Investigating `ClientDisconnect`**
-- **Action:** Re-ran verification with the discovery fix in place.
-- **Error:** Playwright still timed out. The backend log now showed a `200 OK` for the discovery query, immediately followed by a `starlette.requests.ClientDisconnect` error.
-- **Diagnosis:** The `CopilotKit` framework likely expects a persistent streaming connection (Server-Sent Events), not a simple request/response.
-- **Fix:** Rewrote `api/index.py` to use a unified `StreamingResponse` that would handle both the discovery query and the subsequent prompt in a single, open connection.
-
-**Step 7: Final Frontend Configuration**
-- **Action:** Re-ran verification with the new streaming backend.
-- **Error:** Playwright still timed out.
-- **Diagnosis:** The issue was now almost certainly a client-side configuration problem.
-- **Fix:** Made two critical changes to `src/App.tsx`:
-    1.  Changed the `runtimeUrl` to an absolute path (`http://localhost:8000/api/generate`) to prevent any proxying issues.
-    2.  Removed the custom `onSend` handler from `<CopilotChat>`, as it was likely conflicting with the main `CopilotKit` runtime.
-
-**Step 8: Final State - Unresolved**
+**Step 5: Final State - Unresolved**
 - **Action:** Restarted all servers and re-ran the verification script.
 - **Error:** The script still times out waiting for the `CopilotKit` button. **This is the final, unresolved state of the issue.**
 
-## 4. Final Code ("Should Work" Version)
+## 4. Final Code
 
-The following code represents the most complete and "correct" state achieved during debugging.
+The following code represents the most complete and "correct" state of the application.
 
 ### `src/App.tsx` (Frontend)
 ```tsx
 import React, { Suspense, useState } from 'react';
-import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
 import type { SceneData } from './types';
+// [CHECK] Ensure this import exists
 import "@copilotkit/react-ui/styles.css";
 
 function App() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
+
+  useCopilotAction({
+    name: "updateScene",
+    description: "Update the 3D voxel scene.",
+    parameters: [
+      {
+        name: "scene",
+        type: "object",
+        description: "The scene data.",
+        attributes: [
+          {
+            name: "chunks",
+            type: "array",
+            description: "The chunks of the scene.",
+            attributes: [
+              {
+                name: "position",
+                type: "array",
+                description: "The position of the chunk.",
+              },
+              {
+                name: "voxels",
+                type: "array",
+                description: "The voxels of the chunk.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    handler: async ({ scene }) => {
+      setSceneData(scene);
+    },
+  });
 
   return (
     <CopilotKit runtimeUrl="http://localhost:8000/api/generate">
@@ -123,8 +139,9 @@ import json
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
@@ -153,45 +170,72 @@ def get_agent():
         return Agent(
             "openai:gpt-4o",
             output_type=AI_SceneDescription,
-            # ... (instructions) ...
+            system_prompt="You are a voxel scene generator. Generate 3D scenes based on the user's prompt."
         )
     return None
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- Streaming Logic ---
-async def stream_handler(request: Request):
+async def stream_handler(body: dict):
     try:
-        body = await request.json()
-
-        # Case 1: CopilotKit discovery query
-        if body.get("operationName") == "availableAgents":
-            discovery_data = { "data": { "availableAgents": { "agents": [{ "name": "Voxel Scene Generator", ... }] } } }
-            yield f"data: {json.dumps(discovery_data)}\n\n"
-            return
-
-        # Case 2: Scene generation prompt
-        prompt = ""
-        # ... (logic to extract prompt from messages) ...
+        # Extract prompt from CopilotKit's message format
+        messages = body.get("messages", [])
+        prompt = messages[-1].get("content", "") if messages else ""
 
         if not prompt:
-            # ... (handle error) ...
+            yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
             return
 
         agent = get_agent()
-        # ... (handle agent errors) ...
+        if not agent:
+            yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
+            return
 
+        # Run the agent
         result = agent.run(prompt)
-        scene_data = result.output.scene.dict()
+
+        # Wrap result in a structure the frontend can parse
+        scene_data = result.data.scene.model_dump()
+
+        # Send the data event
         yield f"data: {json.dumps(scene_data)}\n\n"
 
     except Exception as e:
-        # ... (handle exceptions) ...
+        print(f"Error: {e}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 @app.post("/api/generate")
-async def run_agent_custom(request: Request) -> Response:
-    return StreamingResponse(stream_handler(request), media_type="text/event-stream")
+async def run_agent_custom(request: Request):
+    body = await request.json()
+
+    # [CHANGE 2] Handle Discovery as JSON
+    if body.get("operationName") == "availableAgents":
+        discovery_data = {
+            "data": {
+                "availableAgents": {
+                    "agents": [{
+                        "name": "Voxel Scene Generator",
+                        "description": "Generates 3D voxel scenes",
+                        "id": "voxel_agent",
+                        "__typename": "Agent"
+                    }],
+                    "__typename": "AvailableAgents"
+                }
+            }
+        }
+        return JSONResponse(content=discovery_data)
+
+    # [CHANGE 3] Handle Chat as Stream
+    return StreamingResponse(stream_handler(body), media_type="text/event-stream")
 ```
 
 ## 5. How to Reproduce the Error

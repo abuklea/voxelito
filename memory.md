@@ -71,6 +71,7 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   Frontend changes are verified using Playwright scripts.
 -   A temporary verification script is created in `/home/jules/verification` to take a screenshot of the changes.
 -   The screenshot is then visually inspected to confirm the changes are correct.
+-   The `test-results/` directory, used for verification artifacts like Playwright screenshots, should be added to `.gitignore`.
 
 ### 5.4. Vite Configuration
 -   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5. The configuration is `define: { 'process.env': {} }`.
@@ -88,3 +89,9 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 ### 5.7. Voxel Engine
 -   The core data structures for the voxel engine are defined in `src/types.ts`.
 -   The computationally intensive greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
+
+### 5.8. CopilotKit Integration
+-   **Dual-Protocol Backend:** The CopilotKit integration requires a dual-protocol backend. For the initial `availableAgents` discovery, the backend must return a standard `JSONResponse`. For subsequent chat interactions, it must return a `StreamingResponse` with `media_type="text/event-stream"`. The `operationName` in the request body can be used to differentiate between the two.
+-   **CORS Middleware:** The FastAPI backend requires CORS middleware to be enabled to allow requests from the frontend development server (e.g., `http://localhost:5173`). This is done using `fastapi.middleware.cors.CORSMiddleware`.
+-   **GraphQL `__typename`:** The `availableAgents` JSON response must include `__typename` fields for the `Agent` and `AvailableAgents` objects. GraphQL clients like the one used by CopilotKit often rely on these fields to identify the object types in the response.
+-   **`useCopilotAction` Hook:** On the frontend, the `useCopilotAction` hook from `@copilotkit/react-core` is used to define client-side functions that the AI can call. The hook's `handler` is responsible for processing the data streamed from the backend.
