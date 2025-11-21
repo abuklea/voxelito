@@ -5,7 +5,7 @@ This document serves as a centralized, living record of the project's state, arc
 ## 1. Project Overview & Goal
 The project is a web-based platform for generating and editing 3D voxel diorama scenes. The core feature is a conversational AI interface that allows users to create and modify scenes through natural language chat prompts. The platform targets a broad audience, from hobbyists and gamers to professional designers, by making 3D content creation intuitive and accessible.
 
-**Branding Update:** The project is now branded as **VOXELITO**, featuring a dark, retro-futuristic "cyber-voxel" aesthetic (Purples, Blues, Neon).
+**Branding Update:** The project is now branded as **VOXELITO**, featuring a dark, retro-futuristic "cyber-voxel" aesthetic. Key visual elements include deep purple/blue backgrounds, neon accents, and a realistic "neon bulb" logo with flicker effects.
 
 ## 2. System Architecture
 The application follows a decoupled client-server model:
@@ -46,7 +46,7 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   **[✓] Phase 3: UI and Feature Integration**
     -   **[✓] Step 11:** Backend LLM Integration
     -   **[✓] Step 12:** Implement Scene State Update via Chat Response
-    -   **[✓] Step 12b:** UI Overhaul (Voxelito Branding & Responsiveness)
+    -   **[✓] Step 12b:** UI Overhaul (Voxelito Branding, Neon Logo, Responsiveness)
 -   **[ ] Phase 4: Finalization and Deployment**
 
 ## 5. Development Process & Key Learnings
@@ -83,3 +83,10 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   **Dual-Protocol Backend:** The CopilotKit integration requires a backend that can handle both a standard `JSONResponse` (for the initial `availableAgents` discovery) and a `StreamingResponse` (for chat).
 -   **Client-Side Message Parsing (`useCopilotChat`):** Due to backend limitations (the custom Pydantic agent does not support the OpenAI Tool Calling protocol), the frontend cannot use `useCopilotAction`. Instead, it uses a "Message Listener" pattern with the `useCopilotChat` hook. A `useEffect` hook monitors the chat's `isLoading` state. When a message is complete, the frontend attempts to parse the assistant's last message content as JSON and updates the application state if it's valid scene data.
 -   **Resolved UI Rendering Failure:** The previous issue where `<CopilotChat>` was failing to render (hidden by overflow/height issues) was resolved by switching to `<CopilotPopup>`. This component floats above the UI and is more robust for this layout. The chat UI has been heavily customized via CSS to match the "Voxelito" dark theme.
+
+### 5.9. Procedural Graphics & Animation
+-   **Procedural Neon Logo:** Instead of using static raster images, the project utilizes procedurally generated SVG components for the logo. This allows for:
+    -   Infinite scalability without pixelation.
+    -   Dynamic coloring (tinting) via CSS props or classes.
+    -   Advanced CSS animations (flicker, glitch) that can target specific parts of the SVG (stroke vs fill).
+-   **CSS Filters for Glow:** The "neon glow" effect is achieved using multiple SVG `feGaussianBlur` layers combined with `drop-shadow` filters in CSS. This creates a realistic light bleed effect that is performant and controllable.
