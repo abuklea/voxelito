@@ -1,43 +1,63 @@
-import React, { Suspense } from 'react';
-import type { SceneData, Voxel } from "./types";
+import React, { Suspense, useState } from 'react';
+import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
+import { CopilotChat } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
-
-// Test scene data to ensure something renders
-const voxels: Voxel[] = [];
-for (let x = 0; x < 1; x++) {
-  for (let y = 0; y < 1; y++) {
-    for (let z = 0; z < 1; z++) {
-      voxels.push({
-        position: [x, y, z],
-        type: 'grass',
-      });
-    }
-  }
-}
-
-const testScene: SceneData = {
-  chunks: [
-    {
-      position: [0, 0, 0],
-      voxels: voxels,
-    },
-  ],
-};
+import type { SceneData } from './types';
+// [CHECK] Ensure this import exists
+import "@copilotkit/react-ui/styles.css";
 
 function App() {
   const { voxelWorld, ref } = useVoxelWorld();
+  const [sceneData, setSceneData] = useState<SceneData | null>(null);
+
+  useCopilotAction({
+    name: "updateScene",
+    description: "Update the 3D voxel scene.",
+    parameters: [
+      {
+        name: "scene",
+        type: "object",
+        description: "The scene data.",
+        attributes: [
+          {
+            name: "chunks",
+            type: "array",
+            description: "The chunks of the scene.",
+            attributes: [
+              {
+                name: "position",
+                type: "array",
+                description: "The position of the chunk.",
+              },
+              {
+                name: "voxels",
+                type: "array",
+                description: "The voxels of the chunk.",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    handler: async ({ scene }) => {
+      setSceneData(scene);
+    },
+  });
 
   return (
-    <div style={{ height: "100vh", width: "100vw" }}>
-      <Viewer ref={ref} />
-      <Suspense fallback={<div style={{ position: 'absolute', top: 10, left: 10, zIndex: 100 }}>Loading Voxel Engine...</div>}>
-        {voxelWorld && (
-          <SceneManager sceneData={testScene} voxelWorld={voxelWorld} />
-        )}
-      </Suspense>
-    </div>
+    <CopilotKit runtimeUrl="http://localhost:8000/api/generate">
+      <div style={{ height: "100vh", width: "100vw" }}>
+        <Viewer ref={ref} />
+        <Suspense fallback={<div>Loading Voxel Engine...</div>}>
+          {voxelWorld && sceneData && (
+            <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
+          )}
+        </Suspense>
+        <CopilotChat />
+      </div>
+    </CopilotKit>
   );
 }
 

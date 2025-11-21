@@ -24,6 +24,8 @@ api/.env.local
 *.sln
 *.sw?
 
+test-results/
+
 # Python
 __pycache__/
 *.pyc
