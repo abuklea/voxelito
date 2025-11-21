@@ -1,177 +1,94 @@
-# Problem Report: Unresolved `CopilotKit` UI Rendering Failure
+# Problem Report: Backend 500 Errors and Protocol Mismatch
 
 **Date:** 2025-11-21
 **Author:** Jules
 
 ## 1. Executive Summary
 
-The primary objective of this task was to implement a client-side "Message Listener" to update the 3D viewer's state from a JSON string returned in the chat. This core functionality was implemented successfully. However, the application remains non-functional due to a persistent, silent rendering failure in the `@copilotKit/react-ui` component.
+The initial issue of the `CopilotKit` UI not rendering was successfully resolved by switching from the embedded `<CopilotChat />` component (which was hidden by `overflow: hidden`) to the floating `<CopilotPopup />`. The chat button now appears and is clickable.
 
-Despite successful communication with the backend (verified by network logs), the CopilotKit chat button never appears in the UI. A significant amount of time was dedicated to debugging this issue, including adding a React Error Boundary and fixing an unrelated bug in the `useVoxelWorld` hook's cleanup logic, but the root cause remains elusive.
+However, verified testing revealed that the chat functionality is currently broken. Initial attempts to use a custom stream handler resulted in empty message content on the frontend. Subsequent attempts to use the official `AGUIAdapter` from `pydantic-ai` resulted in `500 Internal Server Error` responses.
 
-This report provides a complete summary of the work performed, a detailed definition of the unresolved problem, the final state of the codebase, and all relevant logs. The goal is to provide the next developer with all the information necessary to investigate and resolve this UI rendering issue.
+The primary blocker is now a combination of:
+1.  **Missing API Key:** The `OPENAI_API_KEY` is not present in the sandbox environment, preventing `pydantic-ai` agents from initializing.
+2.  **Protocol Mismatch/Debugging:** Without a valid agent, attempts to debug the stream format (custom vs. adapter) are hindered by `500` errors.
 
-## 2. Unresolved Issue: Silent `CopilotKit` Initialization Failure
+## 2. Issues Identified
 
-### 2.1. Problem Definition
+### 2.1. Missing `OPENAI_API_KEY`
+- **Symptom:** `get_agent()` returns `None`.
+- **Logs:** `DEBUG: Initializing Agent...` followed by `500` and response body `{"error": "Agent not initialized"}`.
+- **Root Cause:** The environment variable is missing in the current shell session.
 
-The application fails to render the `CopilotKit` chat button and interface, even though the underlying 3D canvas is rendering correctly and the frontend is successfully communicating with the backend API. The failure is silent—there are no errors in the browser console or the Vite development server logs that point to a root cause.
+### 2.2. Backend 500 Errors with `AGUIAdapter`
+- **Symptom:** Requests to `/api/generate` return `500`.
+- **Diagnosis:** The `AGUIAdapter` implementation in `api/index.py` (added to fix protocol issues) depends on a valid `Agent` instance. Since the agent is `None`, the adapter logic is either skipped (returning the error) or crashes if forced with an invalid agent.
+- **Observation:** Even when mock logic was used previously, the `CopilotKit` frontend received empty content strings, suggesting the stream format `data: <json>` was not being parsed correctly by the client.
 
-### 2.2. Observed Behavior
+### 2.3. Frontend Message Parsing
+- **Symptom:** `Last message structure: {"content":"","role":"assistant"...}`.
+- **Diagnosis:** The frontend `useCopilotChat` hook expects a specific stream of events to populate the `content`. The custom handler used initially `yield f"data: {json.dumps(scene_data)}\n\n"` likely violated the expected protocol (e.g., expecting `data: "token"` deltas).
 
-- The Playwright verification script consistently times out while waiting for the chat button to appear: `waiting for get_by_role("button", name="CopilotKit")`.
-- The backend API successfully receives and responds to the initial `availableAgents` discovery query from the `CopilotKit` frontend with a `200 OK` status. The network logs confirm this.
-- The 3D viewer canvas renders correctly in the background.
+## 3. Current State of Codebase
 
-### 2.3. Suspected Root Cause
+### `api/index.py`
+The backend is currently configured to attempt using `AGUIAdapter` with extensive debug logging. It falls back to a custom handler if the adapter is missing, but the adapter is present.
+```python
+# ... logging setup ...
+@app.post("/api/generate")
+async def run_agent_custom(request: Request):
+    if AGUIAdapter:
+        try:
+            print("DEBUG: Initializing Agent...", file=sys.stderr)
+            agent = get_agent()
+            if not agent:
+                return JSONResponse({"error": "Agent not initialized"}, status_code=500)
 
-The root cause is likely a subtle configuration issue or an internal error within the `@copilotkit/react-core` and `@copilotkit/react-ui` components that is being suppressed. The debugging process has ruled out the most obvious causes, including server connectivity, CORS, and incorrect API responses. The issue persists even after implementing a React Error Boundary, suggesting the error is not being thrown in a way that can be caught by standard error handling.
+            # ... Manual AGUI handling ...
+            run_input = await AGUIAdapter.from_request(request)
+            adapter = AGUIAdapter(agent)
+            stream = adapter.run_stream(run_input)
+            return StreamingResponse(stream_with_logging(stream), media_type="text/event-stream")
+        except BaseException as e:
+            # ... error logging ...
+```
 
-## 3. Chronological Debugging Log
-
-The following is a detailed log of the steps taken to diagnose and resolve the issues.
-
-**Step 1: Implement the "Message Listener" Feature**
-- **Action:** Refactored `src/App.tsx` to use the `useCopilotChat` hook and a `useEffect` to parse incoming messages from the assistant.
-- **Result:** The core logic for updating the scene from the chat was implemented as per the PRP.
-
-**Step 2: Initial Verification Failure**
-- **Action:** Ran the Playwright verification script (`verify.spec.js`).
-- **Error:** The script timed out, unable to find the `CopilotKit` button. This was the first indication of the UI rendering issue.
-
-**Step 3: Add React Error Boundary**
-- **Action:** Created a new `ErrorBoundary.tsx` component and wrapped the `<CopilotKit>` provider in `App.tsx` with it.
-- **Result:** The Error Boundary did not catch any errors, indicating the failure is happening silently within the library.
-
-**Step 4: Investigate Network Activity**
-- **Action:** Modified the Playwright script to log network requests.
-- **Result:** This was a key breakthrough. The logs showed a successful `POST` request to `/api/generate` and a `200 OK` response. This confirmed that the frontend-backend communication was working correctly and the issue was isolated to the frontend rendering.
-- **Log Snippet:**
-  ```
-  >> POST http://localhost:8000/api/generate
-  << 200 http://localhost:8000/api/generate
-  ```
-
-**Step 5: Fix Unrelated `useVoxelWorld` Bug**
-- **Action:** Investigated a `Warning: Unexpected return value from a callback ref` in the console logs.
-- **Diagnosis:** The `useCallback` hook in `src/hooks/useVoxelWorld.ts` was incorrectly returning a cleanup function.
-- **Fix:** Refactored the hook to move the cleanup logic into a separate `useEffect`, which is the correct pattern.
-- **Result:** This fixed the console warning but did not resolve the main UI rendering issue.
-
-**Step 6: Final State - Unresolved**
-- **Action:** Re-ran the verification script after all the above changes.
-- **Error:** The script still times out waiting for the `CopilotKit` button. This is the final, unresolved state of the issue.
-
-## 4. Final Code
-
-The following code represents the most complete and "correct" state of the application after the debugging attempts.
-
-### `src/App.tsx` (Frontend)
+### `src/App.tsx`
+The frontend uses `CopilotPopup` and includes debug logging to inspect message content.
 ```tsx
-import React, { Suspense, useState, useEffect } from 'react';
-import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
-import { CopilotChat } from "@copilotkit/react-ui";
-import { Viewer } from "./features/viewer/Viewer";
-import { SceneManager } from "./features/voxel-engine/SceneManager";
-import { useVoxelWorld } from './hooks/useVoxelWorld';
-import type { SceneData } from './types';
-import ErrorBoundary from './ErrorBoundary'; // Import the ErrorBoundary
-import "@copilotkit/react-ui/styles.css";
-
-function VoxelApp() {
-  const { voxelWorld, ref } = useVoxelWorld();
-  const [sceneData, setSceneData] = useState<SceneData | null>(null);
-
-  const { visibleMessages, isLoading } = useCopilotChat();
-
-  useEffect(() => {
-    if (!isLoading && visibleMessages.length > 0) {
-      const lastMessage = visibleMessages[visibleMessages.length - 1];
-
-      if (lastMessage.role === "assistant" && lastMessage.content) {
-        try {
-          const parsed = JSON.parse(lastMessage.content);
-
-          if (parsed && Array.isArray(parsed.chunks)) {
-            console.log("Valid scene data received, updating viewer...");
-            setSceneData(parsed as SceneData);
-          }
-        } catch (e) {
-          // console.debug("Last message was not valid JSON scene data");
-        }
-      }
-    }
-  }, [isLoading, visibleMessages]);
-
-  return (
-    <div style={{ height: "100vh", width: "100vw" }}>
-      <Viewer ref={ref} />
-      <Suspense fallback={<div>Loading Voxel Engine...</div>}>
-        {voxelWorld && sceneData && (
-          <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
-        )}
-      </Suspense>
-      <CopilotChat />
-    </div>
-  );
-}
-
-function App() {
-  return (
-    <ErrorBoundary>
-      <CopilotKit runtimeUrl="http://localhost:8000/api/generate">
-        <VoxelApp />
-      </CopilotKit>
-    </ErrorBoundary>
-  );
-}
-
-export default App;
+// ...
+      <CopilotPopup
+        instructions="You are a helper that generates 3D voxel scenes."
+        labels={{
+          title: "Voxel Assistant",
+          initial: "Describe a scene to generate!",
+        }}
+      />
+// ...
 ```
 
-### `src/hooks/useVoxelWorld.ts` (Corrected Hook)
-```typescript
-import { useState, useCallback, useEffect } from 'react';
-import { VoxelWorld } from '../lib/VoxelWorld';
+### `verify.spec.js`
+The test script is updated to click the "Open Chat" button (CopilotPopup default) and poll for the success log message. It dumps all logs on failure.
 
-export const useVoxelWorld = () => {
-  const [voxelWorld, setVoxelWorld] = useState<VoxelWorld | null>(null);
+## 4. Steps to Reproduce
 
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    if (node !== null) {
-      console.log("VoxelWorld: Container mounted, initializing engine...");
-      const world = new VoxelWorld(node);
-      setVoxelWorld(world);
-    }
-  }, []);
+1.  **Start the environment:**
+    ```bash
+    npm run dev > frontend.log 2>&1 &
+    uvicorn api.index:app --port 8000 > backend.log 2>&1 &
+    ```
+2.  **Run the verification test:**
+    ```bash
+    npx playwright test verify.spec.js
+    ```
+3.  **Observe failure:**
+    The test will timeout waiting for the "Valid scene data" log. The console logs will show `500 Internal Server Error` or empty message content.
 
-  // useEffect for cleanup
-  useEffect(() => {
-    // This function will be called when the component unmounts
-    return () => {
-      if (voxelWorld) {
-        console.log("VoxelWorld: Disposing engine...");
-        voxelWorld.dispose();
-      }
-    };
-  }, [voxelWorld]);
+## 5. Recommended Next Steps
 
-  return { voxelWorld, ref };
-};
-```
-
-## 5. How to Reproduce the Error
-
-1.  Ensure all dependencies are installed: `npm install` and `pip install -r api/requirements.txt`.
-2.  Ensure a valid `OPENAI_API_KEY` is set in an `api/.env.local` file.
-3.  Start the frontend server: `npm run dev`.
-4.  Start the backend server: `uvicorn api.index:app --port 8000`.
-5.  Open the application in a browser at `http://localhost:5173`.
-6.  Observe that the 3D viewer appears but the chat button does not. Check the browser console and network tab for details.
-7.  Run the Playwright test `npx playwright test verify.spec.js` to see the timeout failure programmatically.
-
-## 6. Recommended Next Steps
-
-1.  **Isolate `CopilotKit`:** As originally suggested in a previous report, create a new, minimal React application (`create-vite-app`) and install only the `@copilotkit` packages. Attempt to render the basic `<CopilotKit>` and `<CopilotChat>` components pointing to the existing backend. This will determine if the issue is a conflict with another library in this project (e.g., `three.js`).
-2.  **Inspect Component Tree:** Use React DevTools to inspect the rendered component tree. Check if the `CopilotKit` components are present in the tree but are simply not visible (e.g., due to a CSS issue).
-3.  **Consult `CopilotKit` Documentation/Support:** Thoroughly review the official documentation for any required props, CSS imports, or provider components that may have been missed. If the issue persists, consider opening an issue on the CopilotKit GitHub repository with a minimal reproduction case.
+1.  **Provide `OPENAI_API_KEY`:** Securely set this environment variable in `api/.env.local`.
+2.  **Verify Agent Initialization:** Ensure `get_agent()` returns a valid agent.
+3.  **Debug Stream Format:**
+    *   If using `AGUIAdapter`: Ensure the `ag-ui-protocol` package version matches what `CopilotKit` expects.
+    *   If using Custom Handler: Reverse engineer the expected SSE format (likely `data: "string_chunk"`).
+4.  **Frontend Parsing:** Once the stream sends content, ensure `App.tsx` correctly parses the JSON string from `lastMessage.content`.

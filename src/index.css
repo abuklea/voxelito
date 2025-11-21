@@ -1,11 +1,19 @@
 :root {
+  --bg-primary: #0f0f16;
+  --bg-secondary: #1a1a24;
+  --accent-primary: #7c3aed;
+  --accent-secondary: #00f3ff;
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --border-color: #2d2d3b;
+
   font-family: "Press Start 2P", cursive;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: dark;
-  color: #FFFFFF;
-  background-color: #121212;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -25,46 +33,84 @@ body,
 
 button {
   border-radius: 0;
-  border: 1px solid #495057;
+  border: 1px solid var(--border-color);
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #2E0A5F;
-  color: #FFFFFF;
+  background-color: var(--bg-secondary);
+  color: var(--accent-secondary);
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 transparent;
 }
+
 button:hover {
-  border-color: #00F6FF;
+  border-color: var(--accent-secondary);
+  box-shadow: 0 0 10px var(--accent-secondary);
+  color: #fff;
+  text-shadow: 0 0 5px var(--accent-secondary);
 }
 
 /* CopilotKit Customizations */
 .copilotKitButton {
-  border-radius: 0;
-  background-color: #2E0A5F;
-  border: 1px solid #495057;
+  border-radius: 0 !important;
+  background-color: var(--accent-primary) !important;
+  border: 1px solid var(--accent-secondary) !important;
+  color: white !important;
+  box-shadow: 0 0 5px var(--accent-primary);
 }
 
 .copilotKitButton:hover {
-  border-color: #00F6FF;
+  background-color: var(--accent-secondary) !important;
+  box-shadow: 0 0 15px var(--accent-secondary);
+}
+
+.copilotKitPopup {
+  border-radius: 0 !important;
+  border: 2px solid var(--accent-primary) !important;
+  background-color: var(--bg-secondary) !important;
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.3) !important;
+  font-family: "Press Start 2P", cursive !important; /* Force font */
+}
+
+.copilotKitHeader {
+  background-color: var(--bg-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--accent-secondary) !important;
 }
 
 .copilotKitInput {
-  border-radius: 0;
-  border: 1px solid #495057;
-  background-color: #1E1E1E;
+  border-radius: 0 !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg-primary) !important;
+  color: white !important;
+  font-family: inherit !important;
 }
 
 .copilotKitInput:focus {
-  border-color: #2E0A5F;
+  border-color: var(--accent-secondary) !important;
+  outline: none !important;
 }
 
 .copilotKitMessages {
-  background-color: transparent;
+  background-color: var(--bg-secondary) !important;
 }
 
 .copilotKitMessage {
-  background-color: #1E1E1E;
-  border-radius: 0;
+  border-radius: 0 !important;
+  padding: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+.copilotKitMessage.user {
+  background-color: var(--accent-primary) !important;
+  color: white !important;
+}
+
+.copilotKitMessage.assistant {
+  background-color: var(--bg-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
 }

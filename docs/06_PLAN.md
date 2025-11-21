@@ -115,6 +115,15 @@ This document breaks down the technical specifications into a detailed, step-by-
         -   `src/features/voxel-engine/voxelizer.ts`: The translation utility.
     -   **Step Dependencies**: Step 8, Step 11.
 
+-   **Step 12b: UI Overhaul & Voxelito Branding**
+    -   **Assignee**: `frontend-developer`
+    -   **Task**: Implement the "Voxelito" visual identity. Update the global CSS variables for a dark, retro-futuristic "cyber-voxel" theme (purples, blues, neon). Add a branded header and improve the 3D scene with a grid floor and atmospheric lighting. Customize the CopilotKit chat UI to match the new design system.
+    -   **Files**:
+        -   `src/index.css`: Global styles and theme variables.
+        -   `src/App.tsx`: Layout updates and header implementation.
+        -   `src/lib/VoxelWorld.ts`: Scene enhancements (grid, fog, lighting).
+    -   **Step Dependencies**: Step 6b, Step 12.
+
 -   **Step 13: Raycasting for Voxel Selection**
     -   **Assignee**: `3d-specialist`
     -   **Task**: Implement `onPointerDown` event handling on the voxel meshes to perform raycasting. Calculate the intersected voxel coordinates and send the selection to the backend via the `ag-ui` agent.

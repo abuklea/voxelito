@@ -1,11 +1,22 @@
 import os
 import json
+import traceback
+import logging
+import sys
 from dotenv import load_dotenv
+
+logging.basicConfig(stream=sys.stderr, level=logging.ERROR)
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
+try:
+    from pydantic_ai.ui.ag_ui import AGUIAdapter
+except ImportError:
+    # Fallback if AGUIAdapter is not found or moved
+    print("Warning: AGUIAdapter not found in pydantic_ai.ui.ag_ui")
+    AGUIAdapter = None
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
@@ -65,20 +76,43 @@ async def stream_handler(body: dict):
             return
 
         # Run the agent
-        result = agent.run(prompt)
+        result = await agent.run(prompt)
 
         # Wrap result in a structure the frontend can parse
         scene_data = result.data.scene.model_dump()
 
         # Send the data event
-        yield f"data: {json.dumps(scene_data)}\n\n"
+        # We double-dump to ensure the client receives a string containing the JSON
+        yield f"data: {json.dumps(json.dumps(scene_data))}\n\n"
 
     except Exception as e:
         print(f"Error: {e}")
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
+async def stream_with_logging(stream):
+    try:
+        async for chunk in stream:
+            yield chunk
+    except Exception as e:
+        logging.error(f"Error during streaming: {e}", exc_info=True)
+        # We can't really change the status code now, but we can maybe yield an error chunk if the protocol supports it
+        raise e
+
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
+    if AGUIAdapter:
+        try:
+            agent = get_agent()
+            if not agent:
+                return JSONResponse({"error": "Agent not initialized"}, status_code=500)
+
+            # Use the official dispatch method if available
+            return await AGUIAdapter.dispatch_request(request, agent=agent)
+        except Exception as e:
+            logging.error(f"Error in AGUIAdapter: {e}", exc_info=True)
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Fallback manual implementation if AGUIAdapter is missing
     body = await request.json()
 
     # [CHANGE 2] Handle Discovery as JSON
