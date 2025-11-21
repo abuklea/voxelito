@@ -114,3 +114,30 @@ button:hover {
   border: 1px solid var(--border-color) !important;
   color: var(--text-primary) !important;
 }
+
+/* Neon Animations */
+@keyframes flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    opacity: 0.1;
+  }
+}
+
+@keyframes glitch {
+  0%, 40%, 44%, 48%, 100% {
+    opacity: 1;
+  }
+  42%, 46% {
+    opacity: 0.1;
+  }
+}
+
+.neon-text-flicker {
+  animation: flicker 4s infinite alternate;
+}
+
+.neon-text-glitch {
+  animation: glitch 6s infinite reverse;
+}

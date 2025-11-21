@@ -6,12 +6,13 @@ import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
 import type { SceneData } from './types';
 import ErrorBoundary from './ErrorBoundary';
+import { NeonLogo } from './components/NeonLogo';
 import "@copilotkit/react-ui/styles.css";
 
 // Header Component
 const Header = () => (
   <header style={{
-    height: '60px',
+    height: '80px', // Increased height for the neon sign
     backgroundColor: 'var(--bg-secondary)',
     borderBottom: '1px solid var(--border-color)',
     display: 'flex',
@@ -21,20 +22,7 @@ const Header = () => (
     justifyContent: 'space-between'
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <div style={{
-        width: '20px',
-        height: '20px',
-        backgroundColor: 'var(--accent-primary)',
-        boxShadow: '0 0 10px var(--accent-primary)'
-      }} />
-      <h1 style={{
-        margin: 0,
-        fontSize: '1.2rem',
-        color: 'var(--text-primary)',
-        textShadow: '2px 2px 0px var(--accent-primary)'
-      }}>
-        VOXEL<span style={{ color: 'var(--accent-secondary)' }}>ITO</span>
-      </h1>
+      <NeonLogo />
     </div>
     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
       ALPHA BUILD
