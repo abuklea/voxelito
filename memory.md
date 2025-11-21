@@ -40,58 +40,43 @@ graph TD
 The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 
 -   **[✓] Phase 1: Project Foundation & Core Setup**
-    -   **[✓] Step 1:** Frontend Project Scaffolding
-    -   **[✓] Step 2:** Install Core Frontend Dependencies
-    -   **[✓] Step 3:** Backend API Setup
-    -   **[✓] Step 4:** Basic 3D Scene Setup
-    -   **[✓] Step 5:** Chat UI Setup (CopilotKit)
 -   **[✓] Phase 2: Voxel Engine and API Development**
-    -   **[✓] Step 7:** Core API Endpoint (`/api/generate`)
-    -   **[✓] Step 8:** Voxel Data Structures
-    -   **[✓] Step 9:** Voxel Meshing Web Worker
-    -   **[✓] Step 10:** Voxel Scene Manager
-    -   **[✓] Step 10b:** Fix Silent Rendering Failure
 -   **[✓] Phase 3: UI and Feature Integration**
     -   **[✓] Step 11:** Backend LLM Integration
+    -   **[✓] Step 12:** Implement Scene State Update via Chat Response
 -   **[ ] Phase 4: Finalization and Deployment**
 
 ## 5. Development Process & Key Learnings
 
 ### 5.1. PRP (Project Realization Plan) Process
 -   Each implementation step from the plan is documented with a PRP markdown file in the `PRPs/` directory.
--   The naming convention is `P<Phase_Number>S<Step_Number>-<Description>.md` (e.g., `P1S4-Basic-3D-Scene.md`).
+-   The naming convention is `P<Phase_Number>S<Step_Number>-<Description>.md`.
 
 ### 5.2. Backend LLM Integration
 -   The Python backend in `api/` uses `pydantic-ai` to interface with LLMs.
--   API keys, such as `OPENAI_API_KEY`, are managed using a `.env.local` file in the `api/` directory. This file must be added to `.gitignore` to prevent committing secrets.
--   The `python-dotenv` library is used to load these environment variables.
--   To prevent application startup failures, the `pydantic-ai` agent is initialized conditionally. If the API key is present, a real OpenAI agent is used; otherwise, the application falls back to a mock agent, allowing for local development without requiring an API key.
+-   API keys are managed using a `.env.local` file in the `api/` directory.
 
 ### 5.3. Frontend Verification
--   Frontend changes are verified using Playwright scripts.
--   A temporary verification script is created in `/home/jules/verification` to take a screenshot of the changes.
--   The screenshot is then visually inspected to confirm the changes are correct.
--   The `test-results/` directory, used for verification artifacts like Playwright screenshots, should be added to `.gitignore`.
+-   Frontend changes are verified using Playwright. The project includes a `verify.spec.js` script for end-to-end testing.
+-   Playwright is installed as a dev dependency (`@playwright/test`), and browsers must be installed via `npx playwright install`.
 
 ### 5.4. Vite Configuration
--   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5. The configuration is `define: { 'process.env': {} }`.
--   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`. This avoids CORS issues and simplifies frontend code.
--   Vite's cache may need to be cleared (`npm run dev -- --force`) after major configuration changes, such as modifying how TypeScript types are imported, to avoid persistent module resolution errors.
+-   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined`.
+-   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`.
 
 ### 5.5. React & Three.js Integration
--   **Suspense Deadlock:** A React component that triggers Suspense (e.g., by dynamically loading a worker) must be wrapped in a `<Suspense>` boundary. Failure to do so can cause the entire application to suspend its rendering process, resulting in a silent failure (blank screen).
--   **Callback Refs for Imperative Libraries:** When integrating imperative libraries like `three.js` that need a reference to a DOM element, the `useCallback` (callback ref) pattern is more reliable than `useRef` and `useEffect`. A callback ref guarantees that the initialization logic runs as soon as the DOM node is available, avoiding timing issues where `ref.current` might be `null`.
+-   **Suspense Deadlock:** A React component that triggers Suspense must be wrapped in a `<Suspense>` boundary to avoid silent rendering failures.
+-   **Callback Refs for Imperative Libraries:** When integrating imperative libraries like `three.js`, use the `useCallback` (callback ref) pattern. **Crucially, callback refs should not return a value.** A common mistake is to return a cleanup function from the callback. This violates React's expectations and can cause subtle rendering bugs. Cleanup logic should be handled in a separate `useEffect` hook.
 
 ### 5.6. TypeScript and Vite
--   **Type-Only Imports:** When a file exports only TypeScript `interface`s or `type`s, it must be imported using `import type`. These constructs are erased during compilation, so a standard `import` will fail at runtime because the module has no exports.
--   **Web Workers:** TypeScript-based Web Workers must be placed in the `src` directory to be compiled by Vite. They should be instantiated using the `new URL(...)` pattern: `new Worker(new URL('../path/to/worker.ts', import.meta.url), { type: 'module' });`.
+-   **Type-Only Imports:** When a file exports only TypeScript `interface`s or `type`s, it must be imported using `import type`.
+-   **Web Workers:** TypeScript-based Web Workers must be placed in the `src` directory and instantiated using the `new URL(...)` pattern.
 
 ### 5.7. Voxel Engine
 -   The core data structures for the voxel engine are defined in `src/types.ts`.
--   The computationally intensive greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
+-   The greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
 
 ### 5.8. CopilotKit Integration
--   **Dual-Protocol Backend:** The CopilotKit integration requires a dual-protocol backend. For the initial `availableAgents` discovery, the backend must return a standard `JSONResponse`. For subsequent chat interactions, it must return a `StreamingResponse` with `media_type="text/event-stream"`. The `operationName` in the request body can be used to differentiate between the two.
--   **CORS Middleware:** The FastAPI backend requires CORS middleware to be enabled to allow requests from the frontend development server (e.g., `http://localhost:5173`). This is done using `fastapi.middleware.cors.CORSMiddleware`.
--   **GraphQL `__typename`:** The `availableAgents` JSON response must include `__typename` fields for the `Agent` and `AvailableAgents` objects. GraphQL clients like the one used by CopilotKit often rely on these fields to identify the object types in the response.
--   **`useCopilotAction` Hook:** On the frontend, the `useCopilotAction` hook from `@copilotkit/react-core` is used to define client-side functions that the AI can call. The hook's `handler` is responsible for processing the data streamed from the backend.
+-   **Dual-Protocol Backend:** The CopilotKit integration requires a backend that can handle both a standard `JSONResponse` (for the initial `availableAgents` discovery) and a `StreamingResponse` (for chat).
+-   **Client-Side Message Parsing (`useCopilotChat`):** Due to backend limitations (the custom Pydantic agent does not support the OpenAI Tool Calling protocol), the frontend cannot use `useCopilotAction`. Instead, it uses a "Message Listener" pattern with the `useCopilotChat` hook. A `useEffect` hook monitors the chat's `isLoading` state. When a message is complete, the frontend attempts to parse the assistant's last message content as JSON and updates the application state if it's valid scene data.
+-   **Unresolved UI Rendering Failure:** There is a persistent, unresolved issue where the `@copilotkit/react-ui` components (specifically the chat button) fail to render, even when the underlying communication with the backend is successful. The failure is silent, with no console errors. This is suspected to be an internal issue within the CopilotKit library.
