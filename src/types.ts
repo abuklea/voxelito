@@ -1,4 +1,25 @@
-export type VoxelType = "air" | "grass" | "stone" | "dirt";
+export type VoxelType =
+  | "air"
+  | "grass"
+  | "stone"
+  | "dirt"
+  | "water"
+  | "wood"
+  | "leaves"
+  | "sand"
+  | "brick"
+  | "roof"
+  | "glass"
+  | "plank"
+  | "concrete"
+  | "asphalt"
+  | "road_white"
+  | "road_yellow"
+  | "neon_blue"
+  | "neon_pink"
+  | "metal"
+  | "snow"
+  | "lava";
 
 export interface Voxel {
   type: VoxelType;
@@ -18,3 +39,5 @@ export interface VoxelChunkData {
   dimensions: [number, number, number];
   chunkId: string;
 }
+
+export type VoxelPalette = Record<VoxelType, { color: string }>;

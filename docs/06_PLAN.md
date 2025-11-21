@@ -124,7 +124,7 @@ This document breaks down the technical specifications into a detailed, step-by-
         -   `src/lib/VoxelWorld.ts`: Scene enhancements (grid, fog, lighting).
     -   **Step Dependencies**: Step 6b, Step 12.
 
--   **Step 13: Raycasting for Voxel Selection**
+-   **Step 13b: Raycasting for Voxel Selection**
     -   **Assignee**: `3d-specialist`
     -   **Task**: Implement `onPointerDown` event handling on the voxel meshes to perform raycasting. Calculate the intersected voxel coordinates and send the selection to the backend via the `ag-ui` agent.
     -   **Files**:
