@@ -51,7 +51,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 9:** Voxel Meshing Web Worker
     -   **[✓] Step 10:** Voxel Scene Manager
     -   **[✓] Step 10b:** Fix Silent Rendering Failure
--   **[ ] Phase 3: UI and Feature Integration**
+-   **[✓] Phase 3: UI and Feature Integration**
+    -   **[✓] Step 11:** Backend LLM Integration
 -   **[ ] Phase 4: Finalization and Deployment**
 
 ## 5. Development Process & Key Learnings
@@ -60,24 +61,30 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
 -   Each implementation step from the plan is documented with a PRP markdown file in the `PRPs/` directory.
 -   The naming convention is `P<Phase_Number>S<Step_Number>-<Description>.md` (e.g., `P1S4-Basic-3D-Scene.md`).
 
-### 5.2. Frontend Verification
+### 5.2. Backend LLM Integration
+-   The Python backend in `api/` uses `pydantic-ai` to interface with LLMs.
+-   API keys, such as `OPENAI_API_KEY`, are managed using a `.env.local` file in the `api/` directory. This file must be added to `.gitignore` to prevent committing secrets.
+-   The `python-dotenv` library is used to load these environment variables.
+-   To prevent application startup failures, the `pydantic-ai` agent is initialized conditionally. If the API key is present, a real OpenAI agent is used; otherwise, the application falls back to a mock agent, allowing for local development without requiring an API key.
+
+### 5.3. Frontend Verification
 -   Frontend changes are verified using Playwright scripts.
 -   A temporary verification script is created in `/home/jules/verification` to take a screenshot of the changes.
 -   The screenshot is then visually inspected to confirm the changes are correct.
 
-### 5.3. Vite Configuration
+### 5.4. Vite Configuration
 -   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined` in the browser. This is a common issue with Vite 5. The configuration is `define: { 'process.env': {} }`.
 -   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`. This avoids CORS issues and simplifies frontend code.
 -   Vite's cache may need to be cleared (`npm run dev -- --force`) after major configuration changes, such as modifying how TypeScript types are imported, to avoid persistent module resolution errors.
 
-### 5.4. React & Three.js Integration
+### 5.5. React & Three.js Integration
 -   **Suspense Deadlock:** A React component that triggers Suspense (e.g., by dynamically loading a worker) must be wrapped in a `<Suspense>` boundary. Failure to do so can cause the entire application to suspend its rendering process, resulting in a silent failure (blank screen).
 -   **Callback Refs for Imperative Libraries:** When integrating imperative libraries like `three.js` that need a reference to a DOM element, the `useCallback` (callback ref) pattern is more reliable than `useRef` and `useEffect`. A callback ref guarantees that the initialization logic runs as soon as the DOM node is available, avoiding timing issues where `ref.current` might be `null`.
 
-### 5.5. TypeScript and Vite
+### 5.6. TypeScript and Vite
 -   **Type-Only Imports:** When a file exports only TypeScript `interface`s or `type`s, it must be imported using `import type`. These constructs are erased during compilation, so a standard `import` will fail at runtime because the module has no exports.
 -   **Web Workers:** TypeScript-based Web Workers must be placed in the `src` directory to be compiled by Vite. They should be instantiated using the `new URL(...)` pattern: `new Worker(new URL('../path/to/worker.ts', import.meta.url), { type: 'module' });`.
 
-### 5.6. Voxel Engine
+### 5.7. Voxel Engine
 -   The core data structures for the voxel engine are defined in `src/types.ts`.
 -   The computationally intensive greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
