@@ -3,13 +3,32 @@ import * as THREE from 'three';
 import { useVoxelMesher } from '../../hooks/useVoxelMesher';
 import { VoxelWorld } from '../../lib/VoxelWorld';
 import type { SceneData, VoxelType } from '../../types';
+import { palette } from './palette';
 
-const voxelTypeMap: Record<VoxelType, number> = {
-  air: 0,
-  grass: 1,
-  stone: 2,
-  dirt: 3,
-};
+// Create a map from VoxelType to ID (index)
+// We start from 1 because 0 is air
+const voxelTypes = Object.keys(palette) as VoxelType[];
+const voxelTypeMap: Record<string, number> = {};
+const idToColor: Record<number, THREE.Color> = {};
+
+voxelTypes.forEach((type, index) => {
+  if (type === 'air') {
+    voxelTypeMap[type] = 0;
+    // Air doesn't have a color usually, or it's not rendered
+  } else {
+    // We want IDs to be > 0
+    // Let's assume air is at index 0 in `voxelTypes` list, but we can force it.
+    // Actually, let's just assign arbitrary IDs starting from 1 for non-air.
+    // Wait, `voxelTypes` order depends on `palette` definition order.
+    // Let's just iterate.
+    const id = type === 'air' ? 0 : index + 1;
+    voxelTypeMap[type] = id;
+    if (palette[type]) {
+       idToColor[id] = new THREE.Color(palette[type].color);
+    }
+  }
+});
+
 
 interface SceneManagerProps {
   sceneData: SceneData;
@@ -20,17 +39,39 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
   const meshes = useRef<Record<string, THREE.Mesh>>({});
 
   const material = useMemo(() => new THREE.MeshStandardMaterial({
-    color: 'green',
+    vertexColors: true, // Enable vertex colors
+    roughness: 0.8,
+    metalness: 0.1,
   }), []);
 
   const onMeshComplete = (chunkId: string, meshData: {
     vertices: Float32Array;
     indices: Uint32Array;
+    voxelIds: Uint8Array;
   }) => {
     if (!voxelWorld) return;
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
+
+    // Convert voxelIds to colors
+    const colors = new Float32Array(meshData.vertices.length); // vertices are x,y,z so length is 3 * count
+    // No, wait. `meshData.vertices` is a flat array of coordinates [x1, y1, z1, x2, y2, z2, ...]
+    // `meshData.voxelIds` corresponds to vertices?
+    // In the worker: `voxelIds.push(actualVoxelId, actualVoxelId, actualVoxelId, actualVoxelId)` for the 4 vertices of a quad.
+    // So `voxelIds` has same count as number of vertices (not coordinates).
+    // `vertices.length` is numVertices * 3.
+    // `voxelIds.length` is numVertices.
+
+    for (let i = 0; i < meshData.voxelIds.length; i++) {
+      const id = meshData.voxelIds[i];
+      const color = idToColor[id] || new THREE.Color(0xff00ff); // Magenta for error
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+    }
+
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -56,7 +97,13 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
       const chunkId = chunk.position.join(',');
       const chunkData = new Uint8Array(32 * 32 * 32);
       for (let i = 0; i < chunk.voxels.length; i++) {
-        chunkData[i] = voxelTypeMap[chunk.voxels[i].type];
+        const type = chunk.voxels[i].type;
+        if (voxelTypeMap[type] !== undefined) {
+             chunkData[i] = voxelTypeMap[type];
+        } else {
+            console.warn(`Unknown voxel type: ${type}`);
+            chunkData[i] = 0; // Default to air or handle error
+        }
       }
       meshChunk(chunkId, chunkData, [32, 32, 32]);
     }

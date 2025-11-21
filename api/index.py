@@ -45,7 +45,14 @@ def get_agent():
         return Agent(
             "openai:gpt-4o",
             output_type=AI_SceneDescription,
-            system_prompt="You are a voxel scene generator. Generate 3D scenes based on the user's prompt."
+            system_prompt=(
+                "You are a voxel scene generator. Generate 3D scenes based on the user's prompt.\n"
+                "You must generate a list of chunks, each containing a list of voxels.\n"
+                "The available voxel types are: 'grass', 'stone', 'dirt', 'water', 'wood', 'leaves', 'sand', "
+                "'brick', 'roof', 'glass', 'plank', 'concrete', 'asphalt', 'road_white', 'road_yellow', "
+                "'neon_blue', 'neon_pink', 'metal', 'snow', 'lava'.\n"
+                "Use these types to create detailed and varied scenes."
+            )
         )
     return None
 

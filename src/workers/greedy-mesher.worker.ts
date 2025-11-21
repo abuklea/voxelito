@@ -6,6 +6,7 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
 
     const vertices: number[] = [];
     const indices: number[] = [];
+    const voxelIds: number[] = [];
     let indexOffset = 0;
 
     const getVoxel = (x: number, y: number, z: number) => {
@@ -94,6 +95,14 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
 
                         vertices.push(...v1, ...v2, ...v3, ...v4);
 
+                        // For each vertex, store the voxel ID (absolute value because negative ID means back-face in slice logic)
+                        // Note: In the slice logic, voxelType is positive if facing one way, negative if other.
+                        // But the actual voxel ID in chunkData is always positive.
+                        // The slice logic stores `voxelType1` or `-voxelType2`.
+                        // So `Math.abs(voxelType)` is the voxel ID.
+                        const actualVoxelId = Math.abs(voxelType);
+                        voxelIds.push(actualVoxelId, actualVoxelId, actualVoxelId, actualVoxelId);
+
                         indices.push(indexOffset, indexOffset + 1, indexOffset + 2);
                         indices.push(indexOffset, indexOffset + 2, indexOffset + 3);
                         indexOffset += 4;
@@ -117,10 +126,12 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
 
     const verticesArray = new Float32Array(vertices);
     const indicesArray = new Uint32Array(indices);
+    const voxelIdsArray = new Uint8Array(voxelIds);
 
     self.postMessage({
         vertices: verticesArray,
         indices: indicesArray,
+        voxelIds: voxelIdsArray,
         chunkId: event.data.chunkId,
-    }, [verticesArray.buffer, indicesArray.buffer]);
+    }, [verticesArray.buffer, indicesArray.buffer, voxelIdsArray.buffer]);
 };
