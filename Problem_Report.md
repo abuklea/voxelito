@@ -1,241 +1,163 @@
-# Problem Report: `CopilotKit` Integration Failure
+# Problem Report: Unresolved `CopilotKit` UI Rendering Failure
 
 **Date:** 2025-11-21
 **Author:** Jules
 
 ## 1. Executive Summary
 
-The primary goal of this task was to fix the CopilotKit initialization failure, which was preventing the chat UI from appearing. The root cause was correctly identified as a protocol mismatch between the frontend and the Python backend. The backend was sending a `StreamingResponse` for all requests, while the frontend expected a `JSONResponse` for the initial `availableAgents` discovery query.
+The primary objective of this task was to implement a client-side "Message Listener" to update the 3D viewer's state from a JSON string returned in the chat. This core functionality was implemented successfully. However, the application remains non-functional due to a persistent, silent rendering failure in the `@copilotKit/react-ui` component.
 
-The backend has been successfully fixed to handle this dual-protocol requirement. It now correctly returns a `JSONResponse` for the discovery query and a `StreamingResponse` for chat messages. Additionally, CORS has been enabled on the backend to allow requests from the frontend development server.
+Despite successful communication with the backend (verified by network logs), the CopilotKit chat button never appears in the UI. A significant amount of time was dedicated to debugging this issue, including adding a React Error Boundary and fixing an unrelated bug in the `useVoxelWorld` hook's cleanup logic, but the root cause remains elusive.
 
-On the frontend, the `App.tsx` component has been updated to use the `useCopilotAction` hook, which is responsible for handling the scene data streamed from the backend.
-
-Despite these fixes, the Playwright verification script continues to fail. The script times out waiting for the CopilotKit chat button to appear, which indicates that the frontend is still not rendering the chat UI. The root cause of this failure is unknown, and it is suspected to be an issue within the CopilotKit library itself or a subtle configuration issue that has not been identified.
-
-This report provides a complete summary of the work performed, the final state of the codebase, and all the debugging steps taken. The goal is to provide the next developer with all the information they need to continue the investigation and resolve the issue.
+This report provides a complete summary of the work performed, a detailed definition of the unresolved problem, the final state of the codebase, and all relevant logs. The goal is to provide the next developer with all the information necessary to investigate and resolve this UI rendering issue.
 
 ## 2. Unresolved Issue: Silent `CopilotKit` Initialization Failure
 
 ### 2.1. Problem Definition
 
-The application fails to render the `CopilotKit` chat button and interface, even though the underlying 3D canvas and the backend API are functioning correctly. The failure is silent—there are no errors in the browser console or the Vite development server logs.
+The application fails to render the `CopilotKit` chat button and interface, even though the underlying 3D canvas is rendering correctly and the frontend is successfully communicating with the backend API. The failure is silent—there are no errors in the browser console or the Vite development server logs that point to a root cause.
 
 ### 2.2. Observed Behavior
 
 - The Playwright verification script consistently times out while waiting for the chat button to appear: `waiting for get_by_role("button", name="CopilotKit")`.
-- The backend API successfully receives and responds to the initial `availableAgents` discovery query from the `CopilotKit` frontend with a `200 OK` status. The backend logs show that the correct `JSONResponse` is being sent.
+- The backend API successfully receives and responds to the initial `availableAgents` discovery query from the `CopilotKit` frontend with a `200 OK` status. The network logs confirm this.
 - The 3D viewer canvas renders correctly in the background.
 
 ### 2.3. Suspected Root Cause
 
-The root cause is likely a subtle configuration issue or an internal error within the `@copilotkit/react-core` and `@copilotkit/react-ui` components that is not being surfaced as a catchable error. The debugging process has ruled out the most obvious causes, including server connectivity, CORS, incorrect API responses, and missing `__typename` fields in the GraphQL response.
+The root cause is likely a subtle configuration issue or an internal error within the `@copilotkit/react-core` and `@copilotkit/react-ui` components that is being suppressed. The debugging process has ruled out the most obvious causes, including server connectivity, CORS, and incorrect API responses. The issue persists even after implementing a React Error Boundary, suggesting the error is not being thrown in a way that can be caught by standard error handling.
 
 ## 3. Chronological Debugging Log
 
 The following is a detailed log of the steps taken to diagnose and resolve the issues.
 
-**Step 1: Initial State - Protocol Mismatch**
-- **Action:** Implemented the dual-protocol backend fix as described in the PRP.
-- **Result:** The backend now correctly handles the `availableAgents` query.
+**Step 1: Implement the "Message Listener" Feature**
+- **Action:** Refactored `src/App.tsx` to use the `useCopilotChat` hook and a `useEffect` to parse incoming messages from the assistant.
+- **Result:** The core logic for updating the scene from the chat was implemented as per the PRP.
 
-**Step 2: CORS Error**
-- **Action:** Ran the Playwright verification script.
-- **Error:** The backend log showed a `405 Method Not Allowed` for an `OPTIONS` request.
-- **Diagnosis:** The browser was sending a CORS preflight request that was being rejected by the backend.
-- **Fix:** Added CORS middleware to the FastAPI application to allow requests from the frontend.
+**Step 2: Initial Verification Failure**
+- **Action:** Ran the Playwright verification script (`verify.spec.js`).
+- **Error:** The script timed out, unable to find the `CopilotKit` button. This was the first indication of the UI rendering issue.
 
-**Step 3: Missing `__typename` Fields**
-- **Action:** Ran the Playwright verification script.
-- **Error:** The script still timed out. The backend logs showed successful `OPTIONS` and `POST` requests.
-- **Diagnosis:** The `availableAgents` response was missing the `__typename` fields, which are often required by GraphQL clients.
-- **Fix:** Added the `__typename` fields to the `discovery_data` in `api/index.py`.
+**Step 3: Add React Error Boundary**
+- **Action:** Created a new `ErrorBoundary.tsx` component and wrapped the `<CopilotKit>` provider in `App.tsx` with it.
+- **Result:** The Error Boundary did not catch any errors, indicating the failure is happening silently within the library.
 
-**Step 4: Incomplete Frontend Integration**
-- **Action:** Requested a code review.
-- **Feedback:** The backend fix was correct, but the frontend was not handling the data stream from the backend.
-- **Fix:** Implemented the `useCopilotAction` hook in `src/App.tsx` to handle the scene data.
+**Step 4: Investigate Network Activity**
+- **Action:** Modified the Playwright script to log network requests.
+- **Result:** This was a key breakthrough. The logs showed a successful `POST` request to `/api/generate` and a `200 OK` response. This confirmed that the frontend-backend communication was working correctly and the issue was isolated to the frontend rendering.
+- **Log Snippet:**
+  ```
+  >> POST http://localhost:8000/api/generate
+  << 200 http://localhost:8000/api/generate
+  ```
 
-**Step 5: Final State - Unresolved**
-- **Action:** Restarted all servers and re-ran the verification script.
-- **Error:** The script still times out waiting for the `CopilotKit` button. **This is the final, unresolved state of the issue.**
+**Step 5: Fix Unrelated `useVoxelWorld` Bug**
+- **Action:** Investigated a `Warning: Unexpected return value from a callback ref` in the console logs.
+- **Diagnosis:** The `useCallback` hook in `src/hooks/useVoxelWorld.ts` was incorrectly returning a cleanup function.
+- **Fix:** Refactored the hook to move the cleanup logic into a separate `useEffect`, which is the correct pattern.
+- **Result:** This fixed the console warning but did not resolve the main UI rendering issue.
+
+**Step 6: Final State - Unresolved**
+- **Action:** Re-ran the verification script after all the above changes.
+- **Error:** The script still times out waiting for the `CopilotKit` button. This is the final, unresolved state of the issue.
 
 ## 4. Final Code
 
-The following code represents the most complete and "correct" state of the application.
+The following code represents the most complete and "correct" state of the application after the debugging attempts.
 
 ### `src/App.tsx` (Frontend)
 ```tsx
-import React, { Suspense, useState } from 'react';
-import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
+import React, { Suspense, useState, useEffect } from 'react';
+import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
 import type { SceneData } from './types';
-// [CHECK] Ensure this import exists
+import ErrorBoundary from './ErrorBoundary'; // Import the ErrorBoundary
 import "@copilotkit/react-ui/styles.css";
 
-function App() {
+function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
 
-  useCopilotAction({
-    name: "updateScene",
-    description: "Update the 3D voxel scene.",
-    parameters: [
-      {
-        name: "scene",
-        type: "object",
-        description: "The scene data.",
-        attributes: [
-          {
-            name: "chunks",
-            type: "array",
-            description: "The chunks of the scene.",
-            attributes: [
-              {
-                name: "position",
-                type: "array",
-                description: "The position of the chunk.",
-              },
-              {
-                name: "voxels",
-                type: "array",
-                description: "The voxels of the chunk.",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    handler: async ({ scene }) => {
-      setSceneData(scene);
-    },
-  });
+  const { visibleMessages, isLoading } = useCopilotChat();
+
+  useEffect(() => {
+    if (!isLoading && visibleMessages.length > 0) {
+      const lastMessage = visibleMessages[visibleMessages.length - 1];
+
+      if (lastMessage.role === "assistant" && lastMessage.content) {
+        try {
+          const parsed = JSON.parse(lastMessage.content);
+
+          if (parsed && Array.isArray(parsed.chunks)) {
+            console.log("Valid scene data received, updating viewer...");
+            setSceneData(parsed as SceneData);
+          }
+        } catch (e) {
+          // console.debug("Last message was not valid JSON scene data");
+        }
+      }
+    }
+  }, [isLoading, visibleMessages]);
 
   return (
-    <CopilotKit runtimeUrl="http://localhost:8000/api/generate">
-      <div style={{ height: "100vh", width: "100vw" }}>
-        <Viewer ref={ref} />
-        <Suspense fallback={<div>Loading Voxel Engine...</div>}>
-          {voxelWorld && sceneData && (
-            <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
-          )}
-        </Suspense>
-        <CopilotChat />
-      </div>
-    </CopilotKit>
+    <div style={{ height: "100vh", width: "100vw" }}>
+      <Viewer ref={ref} />
+      <Suspense fallback={<div>Loading Voxel Engine...</div>}>
+        {voxelWorld && sceneData && (
+          <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
+        )}
+      </Suspense>
+      <CopilotChat />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <CopilotKit runtimeUrl="http://localhost:8000/api/generate">
+        <VoxelApp />
+      </CopilotKit>
+    </ErrorBoundary>
   );
 }
 
 export default App;
 ```
 
-### `api/index.py` (Backend)
-```python
-import os
-import json
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+### `src/hooks/useVoxelWorld.ts` (Corrected Hook)
+```typescript
+import { useState, useCallback, useEffect } from 'react';
+import { VoxelWorld } from '../lib/VoxelWorld';
 
-# Load environment variables
-load_dotenv(dotenv_path='api/.env.local')
+export const useVoxelWorld = () => {
+  const [voxelWorld, setVoxelWorld] = useState<VoxelWorld | null>(null);
 
-# --- Pydantic Models ---
-class Voxel(BaseModel):
-    x: int
-    y: int
-    z: int
-    type: str
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (node !== null) {
+      console.log("VoxelWorld: Container mounted, initializing engine...");
+      const world = new VoxelWorld(node);
+      setVoxelWorld(world);
+    }
+  }, []);
 
-class Chunk(BaseModel):
-    position: list[int]
-    voxels: list[Voxel]
+  // useEffect for cleanup
+  useEffect(() => {
+    // This function will be called when the component unmounts
+    return () => {
+      if (voxelWorld) {
+        console.log("VoxelWorld: Disposing engine...");
+        voxelWorld.dispose();
+      }
+    };
+  }, [voxelWorld]);
 
-class SceneData(BaseModel):
-    chunks: list[Chunk]
-
-class AI_SceneDescription(BaseModel):
-    """A 3D scene composed of voxels, organized in chunks."""
-    scene: SceneData = Field(description="The chunk and voxel data for the 3D scene.")
-
-# --- Agent Initialization ---
-def get_agent():
-    if "OPENAI_API_KEY" in os.environ and os.environ["OPENAI_API_KEY"]:
-        return Agent(
-            "openai:gpt-4o",
-            output_type=AI_SceneDescription,
-            system_prompt="You are a voxel scene generator. Generate 3D scenes based on the user's prompt."
-        )
-    return None
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- Streaming Logic ---
-async def stream_handler(body: dict):
-    try:
-        # Extract prompt from CopilotKit's message format
-        messages = body.get("messages", [])
-        prompt = messages[-1].get("content", "") if messages else ""
-
-        if not prompt:
-            yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
-            return
-
-        agent = get_agent()
-        if not agent:
-            yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
-            return
-
-        # Run the agent
-        result = agent.run(prompt)
-
-        # Wrap result in a structure the frontend can parse
-        scene_data = result.data.scene.model_dump()
-
-        # Send the data event
-        yield f"data: {json.dumps(scene_data)}\n\n"
-
-    except Exception as e:
-        print(f"Error: {e}")
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-@app.post("/api/generate")
-async def run_agent_custom(request: Request):
-    body = await request.json()
-
-    # [CHANGE 2] Handle Discovery as JSON
-    if body.get("operationName") == "availableAgents":
-        discovery_data = {
-            "data": {
-                "availableAgents": {
-                    "agents": [{
-                        "name": "Voxel Scene Generator",
-                        "description": "Generates 3D voxel scenes",
-                        "id": "voxel_agent",
-                        "__typename": "Agent"
-                    }],
-                    "__typename": "AvailableAgents"
-                }
-            }
-        }
-        return JSONResponse(content=discovery_data)
-
-    # [CHANGE 3] Handle Chat as Stream
-    return StreamingResponse(stream_handler(body), media_type="text/event-stream")
+  return { voxelWorld, ref };
+};
 ```
 
 ## 5. How to Reproduce the Error
@@ -246,10 +168,10 @@ async def run_agent_custom(request: Request):
 4.  Start the backend server: `uvicorn api.index:app --port 8000`.
 5.  Open the application in a browser at `http://localhost:5173`.
 6.  Observe that the 3D viewer appears but the chat button does not. Check the browser console and network tab for details.
+7.  Run the Playwright test `npx playwright test verify.spec.js` to see the timeout failure programmatically.
 
 ## 6. Recommended Next Steps
 
-1.  **Isolate `CopilotKit`:** Create a new, minimal React application (`create-vite-app`) and install only the `@copilotkit` packages. Attempt to render the basic `<CopilotKit>` and `<CopilotChat>` components pointing to the existing backend. This will determine if the issue is a conflict with another library in the main project.
-2.  **Inspect Network Stream:** Use the browser's developer tools to inspect the `generate` request in the Network tab. Check the "EventStream" or "Response" tab to see if the streaming data from the backend is being received and if it is correctly formatted.
-3.  **Consult `CopilotKit` Documentation:** Thoroughly review the official documentation for any required props, CSS imports, or provider components that may have been missed. The issue could be a simple misconfiguration.
-4.  **Add Frontend Error Boundaries:** Wrap the `<CopilotKit>` component in a React Error Boundary to catch any potential rendering errors that are being suppressed internally.
+1.  **Isolate `CopilotKit`:** As originally suggested in a previous report, create a new, minimal React application (`create-vite-app`) and install only the `@copilotkit` packages. Attempt to render the basic `<CopilotKit>` and `<CopilotChat>` components pointing to the existing backend. This will determine if the issue is a conflict with another library in this project (e.g., `three.js`).
+2.  **Inspect Component Tree:** Use React DevTools to inspect the rendered component tree. Check if the `CopilotKit` components are present in the tree but are simply not visible (e.g., due to a CSS issue).
+3.  **Consult `CopilotKit` Documentation/Support:** Thoroughly review the official documentation for any required props, CSS imports, or provider components that may have been missed. If the issue persists, consider opening an issue on the CopilotKit GitHub repository with a minimal reproduction case.
