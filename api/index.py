@@ -144,7 +144,7 @@ async def stream_handler(body: dict):
                     "messages": [
                         {
                             "__typename": "TextMessageOutput",
-                            "content": json_str,
+                            "content": [json_str],
                             "role": "assistant",
                             "id": "msg_response"
                         }
