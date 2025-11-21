@@ -3,6 +3,7 @@ import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotPopup } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
+import { InteractionController } from "./features/viewer/InteractionController";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
 import type { SceneData } from './types';
 import ErrorBoundary from './ErrorBoundary';
@@ -61,6 +62,7 @@ function VoxelApp() {
       <Header />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Viewer ref={ref} />
+        <InteractionController voxelWorld={voxelWorld} />
         <Suspense fallback={<div style={{ color: 'white', padding: '20px' }}>Loading Voxel Engine...</div>}>
           {voxelWorld && sceneData && (
             <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />

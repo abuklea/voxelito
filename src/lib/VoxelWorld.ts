@@ -3,8 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export class VoxelWorld {
   public scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
+  public camera: THREE.PerspectiveCamera;
+  public renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
   private renderRequested: boolean = false;
 
