@@ -4,19 +4,30 @@ import traceback
 import logging
 import sys
 from dotenv import load_dotenv
+import nest_asyncio
+from fastapi.concurrency import run_in_threadpool
 
-logging.basicConfig(stream=sys.stderr, level=logging.ERROR)
+nest_asyncio.apply()
+
+# Configure logging to ensure we see output immediately
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.INFO)
+logging.getLogger("httpcore").setLevel(logging.INFO)
+logging.getLogger("openai").setLevel(logging.INFO)
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
-try:
-    from pydantic_ai.ui.ag_ui import AGUIAdapter
-except ImportError:
-    # Fallback if AGUIAdapter is not found or moved
-    print("Warning: AGUIAdapter not found in pydantic_ai.ui.ag_ui")
-    AGUIAdapter = None
+
+# Force fallback manual handler
+AGUIAdapter = None
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
@@ -41,7 +52,9 @@ class AI_SceneDescription(BaseModel):
 
 # --- Agent Initialization ---
 def get_agent():
-    if "OPENAI_API_KEY" in os.environ and os.environ["OPENAI_API_KEY"]:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if api_key:
+        logger.info(f"Initializing Agent with API Key: {api_key[:5]}...")
         return Agent(
             "openai:gpt-4o",
             output_type=AI_SceneDescription,
@@ -54,6 +67,7 @@ def get_agent():
                 "Use these types to create detailed and varied scenes."
             )
         )
+    logger.error("OPENAI_API_KEY not found.")
     return None
 
 app = FastAPI()
@@ -68,10 +82,26 @@ app.add_middleware(
 
 # --- Streaming Logic ---
 async def stream_handler(body: dict):
+    logger.info("Stream handler started")
     try:
-        # Extract prompt from CopilotKit's message format
-        messages = body.get("messages", [])
-        prompt = messages[-1].get("content", "") if messages else ""
+        # Parsing logic for CopilotKit GraphQL request
+        variables = body.get("variables", {})
+        data = variables.get("data", {})
+
+        messages = data.get("messages", [])
+        if not messages:
+            messages = body.get("messages", [])
+
+        if messages:
+            last_message = messages[-1]
+            if "textMessage" in last_message:
+                prompt = last_message["textMessage"].get("content", "")
+            else:
+                prompt = last_message.get("content", "")
+        else:
+            prompt = ""
+
+        logger.info(f"Prompt extracted: {prompt}")
 
         if not prompt:
             yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
@@ -83,47 +113,65 @@ async def stream_handler(body: dict):
             return
 
         # Run the agent
-        result = await agent.run(prompt)
+        logger.info("Running agent...")
+        # Use run_sync in a threadpool to avoid async loop conflicts
+        result = await run_in_threadpool(agent.run_sync, prompt)
+        logger.info("Agent run complete.")
 
         # Wrap result in a structure the frontend can parse
-        scene_data = result.data.scene.model_dump()
+        scene_data = result.output.scene.model_dump()
+        json_str = json.dumps(scene_data)
 
-        # Send the data event
-        # We double-dump to ensure the client receives a string containing the JSON
-        yield f"data: {json.dumps(json.dumps(scene_data))}\n\n"
+        # Construct a response format that CopilotKit might accept
+        # TextMessageOutput style
+        response_payload = {
+            "result": json_str # Trying 'result' as a fallback key often used in GraphQL custom scalars
+        }
+
+        # Or better, let's try the 'content' directly if it expects text
+        # But previous attempt with text string crashed it.
+        # Previous attempt with {content: ...} is UNTESTED.
+        # Let's try the OpenAI-ish structure again but with "text" key?
+
+        # Let's go with the TextMessageOutput structure based on the query
+        # The query asks for `... on TextMessageOutput { content }`
+        # The response should match the GraphQL shape.
+        # data: { data: { generateCopilotResponse: { messages: [ ... ] } } }
+
+        graphql_response = {
+            "data": {
+                "generateCopilotResponse": {
+                    "messages": [
+                        {
+                            "__typename": "TextMessageOutput",
+                            "content": json_str,
+                            "role": "assistant",
+                            "id": "msg_response"
+                        }
+                    ]
+                }
+            }
+        }
+
+        yield f"data: {json.dumps(graphql_response)}\n\n"
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error in stream_handler: {e}", exc_info=True)
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-async def stream_with_logging(stream):
-    try:
-        async for chunk in stream:
-            yield chunk
-    except Exception as e:
-        logging.error(f"Error during streaming: {e}", exc_info=True)
-        # We can't really change the status code now, but we can maybe yield an error chunk if the protocol supports it
-        raise e
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
-    if AGUIAdapter:
-        try:
-            agent = get_agent()
-            if not agent:
-                return JSONResponse({"error": "Agent not initialized"}, status_code=500)
+    logger.info("Received request at /api/generate")
+    try:
+        body = await request.json()
+        logger.info(f"Request body: {json.dumps(body)}...")
+    except Exception as e:
+        logger.error(f"Failed to parse body: {e}")
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-            # Use the official dispatch method if available
-            return await AGUIAdapter.dispatch_request(request, agent=agent)
-        except Exception as e:
-            logging.error(f"Error in AGUIAdapter: {e}", exc_info=True)
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    # Fallback manual implementation if AGUIAdapter is missing
-    body = await request.json()
-
-    # [CHANGE 2] Handle Discovery as JSON
+    # Handle Discovery as JSON
     if body.get("operationName") == "availableAgents":
+        logger.info("Handling availableAgents discovery")
         discovery_data = {
             "data": {
                 "availableAgents": {
@@ -139,5 +187,6 @@ async def run_agent_custom(request: Request):
         }
         return JSONResponse(content=discovery_data)
 
-    # [CHANGE 3] Handle Chat as Stream
+    # Handle Chat as Stream
+    logger.info("Handling chat stream")
     return StreamingResponse(stream_handler(body), media_type="text/event-stream")
