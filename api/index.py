@@ -3,8 +3,9 @@ import json
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
@@ -14,7 +15,7 @@ class Voxel(BaseModel):
     x: int
     y: int
     z: int
-    type: str  # Use string for type names like 'grass', 'stone'
+    type: str
 
 class Chunk(BaseModel):
     position: list[int]
@@ -33,80 +34,69 @@ def get_agent():
         return Agent(
             "openai:gpt-4o",
             output_type=AI_SceneDescription,
-            instructions=[
-                "You are a helpful assistant that generates 3D voxel scenes based on user descriptions.",
-                "Generate a scene that matches the user's request, organizing voxels into chunks at position [0,0,0].",
-                "The origin (0,0,0) is at the center of the base.",
-                "The y-axis is vertical.",
-                "Use voxel types like 'grass', 'stone', 'dirt', etc."
-            ],
+            system_prompt="You are a voxel scene generator. Generate 3D scenes based on the user's prompt."
         )
-    else:
-        print("OPENAI_API_KEY is not set. Using a mock agent.")
-        # This mock agent will not work with the current setup, an API key is required.
-        return None
+    return None
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- Streaming Logic ---
-async def stream_handler(request: Request):
-    """
-    Handles both CopilotKit discovery and scene generation within a single streaming endpoint.
-    """
+async def stream_handler(body: dict):
     try:
-        body = await request.json()
-        print(f"Received request body: {body}")
-
-        # Case 1: CopilotKit discovery query
-        if body.get("operationName") == "availableAgents":
-            discovery_data = {
-                "data": {
-                    "availableAgents": {
-                        "agents": [{
-                            "name": "Voxel Scene Generator",
-                            "id": "voxel_scene_generator",
-                            "description": "Generates a 3D voxel scene from a text prompt.",
-                            "__typename": "Agent"
-                        }],
-                        "__typename": "AvailableAgents"
-                    }
-                }
-            }
-            yield f"data: {json.dumps(discovery_data)}\n\n"
-            return
-
-        # Case 2: Scene generation prompt
-        prompt = ""
-        if "messages" in body and isinstance(body["messages"], list) and len(body["messages"]) > 0:
-            last_message = body["messages"][-1]
-            if last_message.get("role") == "user":
-                prompt = last_message.get("content", "")
+        # Extract prompt from CopilotKit's message format
+        messages = body.get("messages", [])
+        prompt = messages[-1].get("content", "") if messages else ""
 
         if not prompt:
-            error_data = {"error": "Prompt not found in request body."}
-            yield f"data: {json.dumps(error_data)}\n\n"
+            yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
             return
 
         agent = get_agent()
-        if agent is None:
-            error_data = {"error": "AI Agent not configured. OPENAI_API_KEY is missing."}
-            yield f"data: {json.dumps(error_data)}\n\n"
+        if not agent:
+            yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
             return
 
-        # Pydantic-AI v2 .run() is not async, run it and then yield the result
+        # Run the agent
         result = agent.run(prompt)
-        # The frontend expects the 'scene' object directly
-        scene_data = result.output.scene.dict()
+
+        # Wrap result in a structure the frontend can parse
+        scene_data = result.data.scene.model_dump()
+
+        # Send the data event
         yield f"data: {json.dumps(scene_data)}\n\n"
 
     except Exception as e:
-        print(f"An error occurred in stream_handler: {e}")
-        error_data = {"error": str(e)}
-        yield f"data: {json.dumps(error_data)}\n\n"
+        print(f"Error: {e}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 @app.post("/api/generate")
-async def run_agent_custom(request: Request) -> Response:
-    """
-    Endpoint that serves the streaming response for all CopilotKit interactions.
-    """
-    return StreamingResponse(stream_handler(request), media_type="text/event-stream")
+async def run_agent_custom(request: Request):
+    body = await request.json()
+
+    # [CHANGE 2] Handle Discovery as JSON
+    if body.get("operationName") == "availableAgents":
+        discovery_data = {
+            "data": {
+                "availableAgents": {
+                    "agents": [{
+                        "name": "Voxel Scene Generator",
+                        "description": "Generates 3D voxel scenes",
+                        "id": "voxel_agent",
+                        "__typename": "Agent"
+                    }],
+                    "__typename": "AvailableAgents"
+                }
+            }
+        }
+        return JSONResponse(content=discovery_data)
+
+    # [CHANGE 3] Handle Chat as Stream
+    return StreamingResponse(stream_handler(body), media_type="text/event-stream")
