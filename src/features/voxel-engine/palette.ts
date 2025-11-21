@@ -1,4 +1,4 @@
-import { VoxelPalette } from "../../types";
+import type { VoxelPalette } from "../../types";
 
 export const palette: VoxelPalette = {
   air: { color: "#000000" },

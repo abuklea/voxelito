@@ -95,7 +95,7 @@ export class VoxelWorld {
     }
   }
 
-  private requestRender() {
+  public requestRender() {
     this.renderRequested = true;
   }
 
