@@ -47,6 +47,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   **[✓] Step 11:** Backend LLM Integration
     -   **[✓] Step 12:** Implement Scene State Update via Chat Response
     -   **[✓] Step 12b:** UI Overhaul (Voxelito Branding, Neon Logo, Responsiveness)
+    -   **[✓] Step 13b:** Raycasting for Voxel Selection
+    -   **[✓] Step 14:** Selection Highlighting
 -   **[ ] Phase 4: Finalization and Deployment**
 
 ## 5. Development Process & Key Learnings
@@ -90,3 +92,8 @@ The project follows the detailed plan outlined in `docs/06_PLAN.md`.
     -   Dynamic coloring (tinting) via CSS props or classes.
     -   Advanced CSS animations (flicker, glitch) that can target specific parts of the SVG (stroke vs fill).
 -   **CSS Filters for Glow:** The "neon glow" effect is achieved using multiple SVG `feGaussianBlur` layers combined with `drop-shadow` filters in CSS. This creates a realistic light bleed effect that is performant and controllable.
+
+### 5.10. Interaction & Highlighting
+-   **Imperative vs. Reactive Sync:** The `VoxelWorld` class manages the Three.js scene imperatively, while React components (like `InteractionController` and `SelectionHighlighter`) handle logic reactively. To bridge this, `VoxelWorld` must expose methods like `requestRender()` so that external components can trigger a frame update when they modify the scene (e.g., adding a highlight mesh) without waiting for a user interaction event.
+-   **Coordinate Mapping:** Mapping mouse clicks to voxel coordinates requires careful handling of intersections. The intersection point on a face can be slightly offset along the normal to differentiate between "inside the voxel" (for selection) and "outside the voxel" (for placing a neighbor).
+-   **Type-Only Imports:** A recurring issue with Vite/TypeScript is the need to explicitly use `import type` for files that only export types (like `src/types.ts`). Failing to do so can cause runtime errors if the bundler tries to import non-existent values.
