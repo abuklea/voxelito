@@ -74,6 +74,12 @@ function VoxelApp() {
   const voxelStore = useVoxelStore();
   const currentSelection = voxelStore?.selectedVoxels || {};
 
+  useEffect(() => {
+    if (voxelWorld) {
+      (window as any).voxelWorld = voxelWorld;
+    }
+  }, [voxelWorld]);
+
   // --- Context for the Agent ---
 
   // 1. Scene Data

@@ -148,4 +148,16 @@ export class VoxelWorld {
       this.requestRender();
     }
   }
+
+  /**
+   * Sets the auto-rotate state of the camera controls.
+   * @param enabled - Whether to enable auto-rotation.
+   */
+  public setAutoRotate(enabled: boolean) {
+    this.controls.autoRotate = enabled;
+    // If enabled, we need to ensure the animation loop keeps rendering
+    // But since controls.update() fires 'change' event which calls requestRender(), it should work.
+    // However, we might need to manually trigger a render to start it if it was idle.
+    this.requestRender();
+  }
 }
