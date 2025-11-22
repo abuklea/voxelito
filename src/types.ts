@@ -27,7 +27,8 @@ export interface Voxel {
 
 export interface Chunk {
   position: [number, number, number];
-  voxels: Voxel[];
+  rle_data: string;
+  palette: string[];
 }
 
 export interface SceneData {

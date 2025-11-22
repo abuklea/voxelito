@@ -11,10 +11,21 @@ import ErrorBoundary from './ErrorBoundary';
 import { NeonLogo } from './components/NeonLogo';
 import "@copilotkit/react-ui/styles.css";
 
-// Header Component
-const Header = () => (
+const SIZES = {
+  Small: "32x32x32",
+  Medium: "64x64x64",
+  Large: "128x128x128",
+  "Extra Large": "256x256x256"
+};
+
+interface HeaderProps {
+  size: string;
+  setSize: (s: string) => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ size, setSize }) => (
   <header style={{
-    height: '80px', // Increased height for the neon sign
+    height: '80px',
     backgroundColor: 'var(--bg-secondary)',
     borderBottom: '1px solid var(--border-color)',
     display: 'flex',
@@ -23,8 +34,26 @@ const Header = () => (
     boxSizing: 'border-box',
     justifyContent: 'space-between'
   }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
       <NeonLogo />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Size:</label>
+          <select
+            value={size}
+            onChange={e => setSize(e.target.value)}
+            style={{
+                padding: '5px',
+                borderRadius: '4px',
+                backgroundColor: '#333',
+                color: 'white',
+                border: '1px solid #555'
+            }}
+          >
+            {Object.entries(SIZES).map(([label, val]) => (
+                <option key={label} value={label}>{label} ({val})</option>
+            ))}
+          </select>
+      </div>
     </div>
     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
       ALPHA BUILD
@@ -35,6 +64,7 @@ const Header = () => (
 function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
+  const [size, setSize] = useState("Medium");
 
   const { visibleMessages, isLoading } = useCopilotChat();
 
@@ -48,11 +78,9 @@ function VoxelApp() {
           if (parsed && Array.isArray(parsed.chunks)) {
             console.log("Valid scene data received, updating viewer...");
             setSceneData(parsed as SceneData);
-          } else {
-            console.log("Received JSON but not valid scene data:", parsed);
           }
         } catch (e) {
-           console.log("Last message content was not JSON:", lastMessage.content);
+           // Ignore non-JSON
         }
       }
     }
@@ -60,7 +88,7 @@ function VoxelApp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-primary)' }}>
-      <Header />
+      <Header size={size} setSize={setSize} />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Viewer ref={ref} />
         <InteractionController voxelWorld={voxelWorld} />
@@ -72,7 +100,7 @@ function VoxelApp() {
         </Suspense>
       </div>
       <CopilotPopup
-        instructions="You are a helper that generates 3D voxel scenes."
+        instructions={`You are a voxel scene generator. The user has selected the scene size: ${size} (${SIZES[size as keyof typeof SIZES]}). Ensure your generated shapes fit loosely within this volume. Center the scene at 0,0,0 roughly.`}
         labels={{
           title: "Voxelito",
           initial: "Describe a scene to generate!",
