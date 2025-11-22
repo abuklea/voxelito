@@ -1,24 +1,88 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { VoxelWorld } from '../../lib/VoxelWorld';
 import { useVoxelStore } from '../../store/voxelStore';
+import type { SelectionMode, VoxelSelection } from '../../store/voxelStore';
 
 interface InteractionControllerProps {
-  /** The VoxelWorld instance to interact with. */
   voxelWorld: VoxelWorld | null;
 }
 
-/**
- * Handles user interactions with the 3D scene (e.g., clicking voxels).
- *
- * This component attaches event listeners to the renderer's DOM element to detect
- * clicks, performs raycasting to find intersected voxels, and updates the
- * global selection state in `voxelStore`.
- *
- * @param props - Component properties.
- */
 export const InteractionController: React.FC<InteractionControllerProps> = ({ voxelWorld }) => {
-  const setSelectedVoxel = useVoxelStore((state) => state.setSelectedVoxel);
+  const {
+    selectionMode,
+    selectionTool,
+    brushSize,
+    selectedVoxels,
+    setSelectedVoxels,
+    addVoxelToSelection,
+    removeVoxelFromSelection,
+  } = useVoxelStore();
+
+  const isDragging = useRef(false);
+  const dragStart = useRef<{ x: number; y: number; z: number } | null>(null);
+  const selectionAtStart = useRef<Record<string, VoxelSelection>>({});
+
+  // Helper: Get voxel coordinate from raycast hit
+  const getVoxelCoord = (point: THREE.Vector3, normal: THREE.Vector3) => {
+    const voxelVec = point.clone().add(normal.clone().multiplyScalar(-0.01));
+    return {
+      x: Math.floor(voxelVec.x),
+      y: Math.floor(voxelVec.y),
+      z: Math.floor(voxelVec.z),
+    };
+  };
+
+  // Helper: Generate a key for the map
+  const getKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+  // Helper: Get all voxels in a box defined by two corners
+  const getVoxelsInBox = (
+    start: { x: number; y: number; z: number },
+    end: { x: number; y: number; z: number }
+  ) => {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    const minZ = Math.min(start.z, end.z);
+    const maxZ = Math.max(start.z, end.z);
+
+    const voxels: VoxelSelection[] = [];
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          voxels.push({
+            position: [x, y, z],
+            chunkId: `${Math.floor(x / 32)},${Math.floor(y / 32)},${Math.floor(z / 32)}`,
+          });
+        }
+      }
+    }
+    return voxels;
+  };
+
+  // Helper: Get voxels in a sphere
+  const getVoxelsInSphere = (center: { x: number; y: number; z: number }, radius: number) => {
+    const voxels: VoxelSelection[] = [];
+    const r = Math.ceil(radius);
+    const rSq = radius * radius;
+
+    for (let x = center.x - r; x <= center.x + r; x++) {
+      for (let y = center.y - r; y <= center.y + r; y++) {
+        for (let z = center.z - r; z <= center.z + r; z++) {
+            const distSq = (x - center.x)**2 + (y - center.y)**2 + (z - center.z)**2;
+            if (distSq <= rSq) {
+                 voxels.push({
+                    position: [x, y, z],
+                    chunkId: `${Math.floor(x / 32)},${Math.floor(y / 32)},${Math.floor(z / 32)}`,
+                 });
+            }
+        }
+      }
+    }
+    return voxels;
+  };
 
   useEffect(() => {
     if (!voxelWorld) return;
@@ -26,88 +90,174 @@ export const InteractionController: React.FC<InteractionControllerProps> = ({ vo
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
-    const onPointerDown = (event: PointerEvent) => {
-      // Only handle primary button (left click)
-      if (event.button !== 0) return;
-
+    const getIntersect = (clientX: number, clientY: number) => {
       const canvas = voxelWorld.renderer.domElement;
       const rect = canvas.getBoundingClientRect();
-
-      // Calculate mouse position in normalized device coordinates (-1 to +1)
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, voxelWorld.camera);
-
       const intersects = raycaster.intersectObjects(voxelWorld.scene.children);
 
-      // Filter for voxel meshes (filtering logic might need adjustment based on mesh naming/structure)
-      // For now, assuming all meshes in scene (except grid/helpers) are voxels or we check for geometry attributes
-      // But actually, the scene also has lights and helpers.
-      // We can't easily tag meshes without modifying SceneManager, but we can check if object is a Mesh.
-
       for (const intersect of intersects) {
-        if (intersect.object instanceof THREE.Mesh && intersect.face) {
-            // Ignore grid helpers etc if possible.
-            // GridHelper is LineSegments, not Mesh usually?
-            // But the ground plane is a Mesh.
-            // Ground plane has geometry PlaneGeometry.
-            if (intersect.object.geometry.type === 'PlaneGeometry') continue;
+         if (intersect.object instanceof THREE.Mesh && intersect.face) {
+             // Simple filter: skip PlaneGeometry (ground plane often) if strictly needed,
+             // but we can also just allow selecting the 'air' above the plane if we want to build there.
+             // For now, assume we select existing voxels.
+             // If we want to select EMPTY space to build, we need a different raycaster (against a grid/plane).
+             // The prompt says "select only the voxels...". So we select existing voxels.
 
-            const p = intersect.point;
-            const n = intersect.face.normal;
+             // Ignore helpers/grid if possible.
+             if (intersect.object.geometry.type === 'PlaneGeometry') continue; // Ground plane
+             return intersect;
+         }
+      }
+      return null;
+    };
 
-            // Transform normal to world space if the object is rotated/scaled
-            const normalMatrix = new THREE.Matrix3().getNormalMatrix(intersect.object.matrixWorld);
-            const worldNormal = n.clone().applyMatrix3(normalMatrix).normalize();
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
 
-            // To get the voxel coordinate *inside* the mesh (for selection), move slightly in against the normal
-            const voxelVec = p.clone().add(worldNormal.clone().multiplyScalar(-0.01));
+      const intersect = getIntersect(event.clientX, event.clientY);
 
-            const x = Math.floor(voxelVec.x / 32); // Assuming 32 is chunk size? No, wait.
-            // The meshes are positioned at chunk offsets.
-            // The vertices in the mesh are local to the chunk?
-            // Let's check SceneManager.
-            // "mesh.position.set(x * 32, y * 32, z * 32);"
-            // And geometry position is local.
-            // But wait, vertices are ints?
-            // "geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));"
-            // The greedy mesher likely produces coordinates 0-32.
-            // So the world coordinate is:
+      // Determine effective mode
+      let mode: SelectionMode = selectionMode;
+      if (event.shiftKey) mode = 'add';
+      else if (event.altKey || event.ctrlKey) mode = 'subtract';
 
-            const vx = Math.floor(voxelVec.x);
-            const vy = Math.floor(voxelVec.y);
-            const vz = Math.floor(voxelVec.z);
-
-            console.log('Selected Voxel:', vx, vy, vz);
-
-            // Find chunk ID?
-            // We don't strictly need chunk ID for the store, just the global position.
-            const cx = Math.floor(vx / 32);
-            const cy = Math.floor(vy / 32);
-            const cz = Math.floor(vz / 32);
-            const chunkId = `${cx},${cy},${cz}`;
-
-            setSelectedVoxel({
-                position: [vx, vy, vz],
-                chunkId: chunkId
-            });
-
-            return; // Stop at first voxel intersection
+      if (!intersect) {
+        if (mode === 'replace') {
+            setSelectedVoxels({});
         }
+        return;
       }
 
-      // If we get here, we clicked nothing or non-voxel
-      setSelectedVoxel(null);
+      isDragging.current = true;
+      const voxel = getVoxelCoord(intersect.point, intersect.face!.normal);
+      dragStart.current = voxel;
+
+      // Snapshot current selection
+      selectionAtStart.current = { ...useVoxelStore.getState().selectedVoxels };
+
+      applyTool(voxel, mode, true);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!isDragging.current || !dragStart.current) return;
+
+      const intersect = getIntersect(event.clientX, event.clientY);
+      if (!intersect) return;
+
+      const voxel = getVoxelCoord(intersect.point, intersect.face!.normal);
+
+      // Determine effective mode
+      let mode: SelectionMode = selectionMode;
+      if (event.shiftKey) mode = 'add';
+      else if (event.altKey || event.ctrlKey) mode = 'subtract';
+
+      applyTool(voxel, mode, false);
+    };
+
+    const onPointerUp = () => {
+      isDragging.current = false;
+      dragStart.current = null;
+      selectionAtStart.current = {};
+    };
+
+    const applyTool = (targetVoxel: {x:number, y:number, z:number}, mode: SelectionMode, isStart: boolean) => {
+        let voxelsToApply: VoxelSelection[] = [];
+
+        if (selectionTool === 'box' && dragStart.current) {
+            voxelsToApply = getVoxelsInBox(dragStart.current, targetVoxel);
+        } else if (selectionTool === 'sphere') {
+             voxelsToApply = getVoxelsInSphere(targetVoxel, brushSize);
+             // For sphere/cursor drag, we accumulate the path?
+             // If I drag a sphere, I want to paint the sphere along the path.
+             // My simple logic here resets to 'selectionAtStart' then adds the CURRENT sphere.
+             // This is wrong for painting.
+             // For painting (Cursor/Sphere), we should Accumulate.
+        } else {
+             // Cursor (Single)
+             voxelsToApply = [{
+                 position: [targetVoxel.x, targetVoxel.y, targetVoxel.z],
+                 chunkId: `${Math.floor(targetVoxel.x/32)},${Math.floor(targetVoxel.y/32)},${Math.floor(targetVoxel.z/32)}`
+             }];
+        }
+
+        // Logic divergence:
+        // Box: "Rubber band" logic. Always relative to Start. Re-evaluate total selection from (StartSelection + Box).
+        // Brush (Cursor/Sphere): "Paint" logic. Add to current selection continuously.
+
+        if (selectionTool === 'box') {
+             const newSelection = { ...selectionAtStart.current };
+
+             if (mode === 'replace') {
+                 // Clear start, apply box
+                 // Actually if mode is replace, selectionAtStart should be ignored?
+                 // "Replace" usually means: The result IS the box.
+                 const final: Record<string, VoxelSelection> = {};
+                 voxelsToApply.forEach(v => {
+                     final[getKey(...v.position)] = v;
+                 });
+                 setSelectedVoxels(final);
+             } else if (mode === 'add') {
+                 voxelsToApply.forEach(v => {
+                     newSelection[getKey(...v.position)] = v;
+                 });
+                 setSelectedVoxels(newSelection);
+             } else if (mode === 'subtract') {
+                 voxelsToApply.forEach(v => {
+                     delete newSelection[getKey(...v.position)];
+                 });
+                 setSelectedVoxels(newSelection);
+             }
+        } else {
+            // Brush/Cursor logic (Paint)
+            // We modify the store directly and cumulatively.
+            // BUT "replace" mode with brush?
+            // Usually means "Paint replaces what's there"? No, usually replace clears everything then starts painting.
+            // If isStart and mode is replace, clear first.
+
+            if (isStart && mode === 'replace') {
+                setSelectedVoxels({});
+                // After clearing, we act as 'add' for the duration of the drag
+                // But we need to be careful not to clear on every move.
+                // So we can just set effective mode to 'add' for subsequent moves?
+                // Or just handle it:
+                // We cleared. Now we add voxelsToApply.
+                const final: Record<string, VoxelSelection> = {};
+                voxelsToApply.forEach(v => {
+                     final[getKey(...v.position)] = v;
+                });
+                setSelectedVoxels(final);
+            } else {
+                // Just add/subtract from current (live) state
+                // Note: We don't use selectionAtStart for painting.
+
+                // Wait, if mode is 'replace' and I move, I want to continue adding to the new selection?
+                // Yes.
+                const effectiveMode = (mode === 'replace') ? 'add' : mode;
+
+                if (effectiveMode === 'add') {
+                     voxelsToApply.forEach(v => addVoxelToSelection(v));
+                } else if (effectiveMode === 'subtract') {
+                     voxelsToApply.forEach(v => removeVoxelFromSelection(v.position));
+                }
+            }
+        }
     };
 
     const element = voxelWorld.renderer.domElement;
     element.addEventListener('pointerdown', onPointerDown);
+    element.addEventListener('pointermove', onPointerMove);
+    element.addEventListener('pointerup', onPointerUp);
+    // Leave/Cancel?
 
     return () => {
       element.removeEventListener('pointerdown', onPointerDown);
+      element.removeEventListener('pointermove', onPointerMove);
+      element.removeEventListener('pointerup', onPointerUp);
     };
-  }, [voxelWorld, setSelectedVoxel]);
+  }, [voxelWorld, selectionMode, selectionTool, brushSize, setSelectedVoxels, addVoxelToSelection, removeVoxelFromSelection]);
 
   return null;
 };

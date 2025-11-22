@@ -9,7 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 
 nest_asyncio.apply()
 
-# Configure logging to ensure we see output immediately
+# Configure logging
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -26,78 +26,45 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
-# Force fallback manual handler
-AGUIAdapter = None
-
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
 
 # --- Pydantic Models ---
 class Voxel(BaseModel):
-    """
-    Represents a single voxel in the 3D space.
-
-    Attributes:
-        x (int): The x-coordinate of the voxel.
-        y (int): The y-coordinate of the voxel.
-        z (int): The z-coordinate of the voxel.
-        type (str): The type/material of the voxel (e.g., 'grass', 'stone').
-    """
     x: int
     y: int
     z: int
     type: str
 
 class Chunk(BaseModel):
-    """
-    Represents a chunk of voxels in the scene.
-
-    Attributes:
-        position (list[int]): The position of the chunk as a list of integers.
-        voxels (list[Voxel]): A list of Voxel objects contained within this chunk.
-    """
     position: list[int]
     voxels: list[Voxel]
 
 class SceneData(BaseModel):
-    """
-    Container for the entire scene data.
-
-    Attributes:
-        chunks (list[Chunk]): A list of chunks that make up the scene.
-    """
     chunks: list[Chunk]
 
 class AI_SceneDescription(BaseModel):
-    """
-    A 3D scene composed of voxels, organized in chunks.
-
-    Attributes:
-        scene (SceneData): The chunk and voxel data for the 3D scene.
-    """
     scene: SceneData = Field(description="The chunk and voxel data for the 3D scene.")
 
 # --- Agent Initialization ---
 def get_agent():
-    """
-    Initializes and returns the Pydantic AI Agent with the OpenAI model.
-
-    Returns:
-        Agent | None: The configured Agent instance if OPENAI_API_KEY is set, otherwise None.
-    """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
-        logger.info(f"Initializing Agent with API Key: {api_key[:5]}...")
         return Agent(
             "openai:gpt-4o",
             output_type=AI_SceneDescription,
             system_prompt=(
                 "You are a voxel scene generator. Generate 3D scenes based on the user's prompt.\n"
-                "You must generate a list of chunks, each containing a list of voxels.\n"
-                "The available voxel types are: 'grass', 'stone', 'dirt', 'water', 'wood', 'leaves', 'sand', "
+                "You will receive context about the current scene state, user selection, and a screenshot.\n"
+                "RULES:\n"
+                "1. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
+                "2. If no selection is provided, you may generate or modify the entire scene.\n"
+                "3. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
+                "4. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
+                "5. Supported Voxel Types: 'grass', 'stone', 'dirt', 'water', 'wood', 'leaves', 'sand', "
                 "'brick', 'roof', 'glass', 'plank', 'concrete', 'asphalt', 'road_white', 'road_yellow', "
                 "'neon_blue', 'neon_pink', 'metal', 'snow', 'lava'.\n"
-                "Use these types to create detailed and varied scenes."
+                "6. Return the full scene data including your changes, or at least the chunks you modified."
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -115,43 +82,47 @@ app.add_middleware(
 
 # --- Streaming Logic ---
 async def stream_handler(body: dict):
-    """
-    Async generator that handles the streaming response for the chat agent.
-
-    It parses the incoming request body to extract the user's prompt, runs the AI agent
-    synchronously within a thread pool, and yields the result as a Server-Sent Event (SSE).
-    The response is formatted to match the GraphQL structure expected by CopilotKit.
-
-    Args:
-        body (dict): The JSON body of the request containing variables and messages.
-
-    Yields:
-        str: A string formatted as an SSE data event containing the JSON-serialized GraphQL response.
-    """
     logger.info("Stream handler started")
     try:
-        # Parsing logic for CopilotKit GraphQL request
         variables = body.get("variables", {})
         data = variables.get("data", {})
-
         messages = data.get("messages", [])
         if not messages:
             messages = body.get("messages", [])
 
-        if messages:
-            last_message = messages[-1]
-            if "textMessage" in last_message:
-                prompt = last_message["textMessage"].get("content", "")
+        # Construct the conversation history / prompt
+        # We want to include the System Context (Readable) if present
+
+        full_context = "User Context:\n"
+        user_prompt = ""
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = ""
+            if "textMessage" in msg:
+                content = msg["textMessage"].get("content", "")
             else:
-                prompt = last_message.get("content", "")
-        else:
-            prompt = ""
+                content = msg.get("content", "")
 
-        logger.info(f"Prompt extracted: {prompt}")
+            # CopilotKit might send readable context as system messages
+            if role == "system":
+                full_context += f"[System Context]: {content}\n"
+            elif role == "user":
+                # Keep the last user prompt as the main prompt, but append previous?
+                # For simplicity, let's concatenate everything relevant
+                user_prompt = content # Assume last user message is the prompt
+                # If there's history, we might want to append it too, but let's focus on current state + prompt
 
-        if not prompt:
-            yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
-            return
+            # Check for screenshot in content (if text)
+            if "image" in content or "base64" in content:
+                 full_context += "[Screenshot provided]\n"
+
+        # Fallback: If we can't find explicit system messages, we rely on the user prompt
+        # containing the context if CopilotKit injected it there.
+
+        final_prompt = f"{full_context}\n\nUser Request: {user_prompt}"
+
+        logger.info(f"Running agent with prompt length: {len(final_prompt)}")
 
         agent = get_agent()
         if not agent:
@@ -159,30 +130,11 @@ async def stream_handler(body: dict):
             return
 
         # Run the agent
-        logger.info("Running agent...")
-        # Use run_sync in a threadpool to avoid async loop conflicts
-        result = await run_in_threadpool(agent.run_sync, prompt)
-        logger.info("Agent run complete.")
+        result = await run_in_threadpool(agent.run_sync, final_prompt)
 
-        # Wrap result in a structure the frontend can parse
+        # Wrap result
         scene_data = result.output.scene.model_dump()
         json_str = json.dumps(scene_data)
-
-        # Construct a response format that CopilotKit might accept
-        # TextMessageOutput style
-        response_payload = {
-            "result": json_str # Trying 'result' as a fallback key often used in GraphQL custom scalars
-        }
-
-        # Or better, let's try the 'content' directly if it expects text
-        # But previous attempt with text string crashed it.
-        # Previous attempt with {content: ...} is UNTESTED.
-        # Let's try the OpenAI-ish structure again but with "text" key?
-
-        # Let's go with the TextMessageOutput structure based on the query
-        # The query asks for `... on TextMessageOutput { content }`
-        # The response should match the GraphQL shape.
-        # data: { data: { generateCopilotResponse: { messages: [ ... ] } } }
 
         graphql_response = {
             "data": {
@@ -207,31 +159,13 @@ async def stream_handler(body: dict):
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
-    """
-    Endpoint to handle agent generation requests.
-
-    This endpoint supports two types of operations:
-    1. "availableAgents" discovery: Returns a JSON list of available agents.
-    2. Chat generation: Streams the agent's response based on the user's prompt using SSE.
-
-    Args:
-        request (Request): The incoming FastAPI request object.
-
-    Returns:
-        JSONResponse | StreamingResponse: A JSON response for discovery or a streaming response for chat.
-    """
-    logger.info("Received request at /api/generate")
     try:
         body = await request.json()
-        logger.info(f"Request body: {json.dumps(body)}...")
-    except Exception as e:
-        logger.error(f"Failed to parse body: {e}")
+    except Exception:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-    # Handle Discovery as JSON
     if body.get("operationName") == "availableAgents":
-        logger.info("Handling availableAgents discovery")
-        discovery_data = {
+        return JSONResponse({
             "data": {
                 "availableAgents": {
                     "agents": [{
@@ -243,9 +177,6 @@ async def run_agent_custom(request: Request):
                     "__typename": "AvailableAgents"
                 }
             }
-        }
-        return JSONResponse(content=discovery_data)
+        })
 
-    # Handle Chat as Stream
-    logger.info("Handling chat stream")
     return StreamingResponse(stream_handler(body), media_type="text/event-stream")
