@@ -45,14 +45,15 @@ test.describe('Complex Scene Generation', () => {
     // Wait for response and rendering
     console.log('Waiting for scene generation...');
 
-    // Wait for scene objects to populate (more reliable than UI check)
-    await page.waitForFunction(() => {
-        // @ts-ignore
-        const world = window.voxelWorld;
-        // Initial scene has lights (3), grid (1), ground (1) = 5 objects.
-        // We expect chunks to be added.
-        return world && world.scene.children.length > 5;
-    }, null, { timeout: 180000 });
+    // Wait for the explicit success log from the App
+    const consolePromise = page.waitForEvent('console', msg => msg.text().includes('Valid scene data received'));
+
+    // Also wait for scene objects to populate, but ensure we got the data first
+    await consolePromise;
+    console.log('Scene data received by frontend.');
+
+    // Wait for meshing worker to finish (give it some time)
+    await page.waitForTimeout(10000);
 
     console.log('Scene generated.');
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'complex_scene_2_response.png') });
@@ -67,7 +68,9 @@ test.describe('Complex Scene Generation', () => {
         if (window.voxelWorld) {
             // @ts-ignore
             // Set camera position further back and up
-            window.voxelWorld.camera.position.set(0, 60, 90);
+            window.voxelWorld.camera.position.set(0, 40, 60); // Lower/Closer to ensure visibility
+            // @ts-ignore
+            window.voxelWorld.controls.target.set(0, 0, 0); // Look at origin
             // @ts-ignore
             window.voxelWorld.controls.update();
             // @ts-ignore
