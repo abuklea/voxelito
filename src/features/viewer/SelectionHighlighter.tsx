@@ -4,9 +4,18 @@ import { useVoxelStore } from '../../store/voxelStore';
 import { VoxelWorld } from '../../lib/VoxelWorld';
 
 interface SelectionHighlighterProps {
+  /** The VoxelWorld instance where the highlight mesh is rendered. */
   voxelWorld: VoxelWorld | null;
 }
 
+/**
+ * Renders a wireframe box around the currently selected voxel.
+ *
+ * It observes the `selectedVoxel` state from the store and updates the position
+ * and visibility of a Three.js `LineSegments` mesh within the `VoxelWorld` scene.
+ *
+ * @param props - Component properties.
+ */
 export const SelectionHighlighter: React.FC<SelectionHighlighterProps> = ({ voxelWorld }) => {
   const selectedVoxel = useVoxelStore((state) => state.selectedVoxel);
   const highlightMeshRef = useRef<THREE.LineSegments | null>(null);

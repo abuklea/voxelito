@@ -1,7 +1,15 @@
+"""
+Verification script for the Neon UI components.
+Uses Playwright to launch the browser, verify the neon logo, and capture screenshots.
+"""
 from playwright.sync_api import sync_playwright
 import time
 
 def verify_neon_ui():
+    """
+    Verifies the presence and rendering of the Neon Logo component.
+    Captures screenshots of the logo and the full page.
+    """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()

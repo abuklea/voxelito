@@ -4,9 +4,19 @@ import { VoxelWorld } from '../../lib/VoxelWorld';
 import { useVoxelStore } from '../../store/voxelStore';
 
 interface InteractionControllerProps {
+  /** The VoxelWorld instance to interact with. */
   voxelWorld: VoxelWorld | null;
 }
 
+/**
+ * Handles user interactions with the 3D scene (e.g., clicking voxels).
+ *
+ * This component attaches event listeners to the renderer's DOM element to detect
+ * clicks, performs raycasting to find intersected voxels, and updates the
+ * global selection state in `voxelStore`.
+ *
+ * @param props - Component properties.
+ */
 export const InteractionController: React.FC<InteractionControllerProps> = ({ voxelWorld }) => {
   const setSelectedVoxel = useVoxelStore((state) => state.setSelectedVoxel);
 

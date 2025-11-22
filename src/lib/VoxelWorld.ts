@@ -1,13 +1,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
+/**
+ * Core class for managing the 3D voxel world using Three.js.
+ * It handles the scene, camera, renderer, lighting, and user controls.
+ */
 export class VoxelWorld {
+  /** The Three.js scene object. */
   public scene: THREE.Scene;
+  /** The active perspective camera. */
   public camera: THREE.PerspectiveCamera;
+  /** The WebGL renderer. */
   public renderer: THREE.WebGLRenderer;
+  /** Orbit controls for camera manipulation. */
   private controls: OrbitControls;
+  /** Flag to track if a render frame has been requested. */
   private renderRequested: boolean = false;
 
+  /**
+   * Initializes the VoxelWorld instance.
+   *
+   * @param container - The HTMLDivElement where the renderer's canvas will be appended.
+   */
   constructor(container: HTMLDivElement) {
     // Scene
     this.scene = new THREE.Scene();
@@ -68,22 +82,41 @@ export class VoxelWorld {
     this.requestRender();
   }
 
+  /**
+   * Adds a chunk mesh to the scene.
+   *
+   * @param chunkId - A unique identifier for the chunk (currently unused logic-wise but good for tracking).
+   * @param mesh - The Three.js Mesh object representing the chunk.
+   */
   public addChunkMesh(chunkId: string, mesh: THREE.Mesh) {
     this.scene.add(mesh);
     this.requestRender();
   }
 
+  /**
+   * Removes a chunk mesh from the scene.
+   *
+   * @param chunkId - The unique identifier of the chunk to remove.
+   * @param mesh - The Three.js Mesh object to remove.
+   */
   public removeChunkMesh(chunkId: string, mesh: THREE.Mesh) {
     this.scene.remove(mesh);
     this.requestRender();
   }
 
+  /**
+   * Cleans up resources and event listeners when the world is destroyed.
+   */
   public dispose() {
     window.removeEventListener('resize', () => this.handleResize());
     this.renderer.dispose();
     this.controls.dispose();
   }
 
+  /**
+   * The main animation loop.
+   * Keeps the loop running via requestAnimationFrame but only renders when requested.
+   */
   private animate() {
     requestAnimationFrame(() => this.animate());
 
@@ -95,10 +128,17 @@ export class VoxelWorld {
     }
   }
 
+  /**
+   * Flags that a new render frame is needed.
+   * Call this whenever the scene changes (e.g., mesh added, camera moved).
+   */
   public requestRender() {
     this.renderRequested = true;
   }
 
+  /**
+   * Handles window resize events to update camera aspect ratio and renderer size.
+   */
   private handleResize() {
     if (this.renderer.domElement.parentElement) {
       const { clientWidth, clientHeight } = this.renderer.domElement.parentElement;

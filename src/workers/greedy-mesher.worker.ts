@@ -1,5 +1,14 @@
 import type { VoxelChunkData } from '../types';
 
+/**
+ * Web Worker for generating voxel meshes using the Greedy Meshing algorithm.
+ *
+ * This worker receives chunk data and dimensions, processes it to reduce the vertex count
+ * by merging adjacent faces of the same voxel type into larger quads, and returns
+ * the geometry data (vertices, indices, voxelIds).
+ *
+ * @param event - The message event containing `VoxelChunkData`.
+ */
 self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
     const { chunkData, dimensions } = event.data;
     const [width, height, depth] = dimensions;

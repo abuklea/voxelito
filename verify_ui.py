@@ -1,7 +1,16 @@
+"""
+General UI verification script.
+Checks if the main application components (header, chat popup) are loading correctly.
+"""
 from playwright.sync_api import sync_playwright
 import time
 
 def verify_ui():
+    """
+    Launches the application in a headless browser and performs a sanity check on the UI.
+    Verifies the presence of the 'VOXELVERSE' text and the CopilotKit chat button.
+    Takes a screenshot upon success.
+    """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()

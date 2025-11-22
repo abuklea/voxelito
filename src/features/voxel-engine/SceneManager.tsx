@@ -31,10 +31,21 @@ voxelTypes.forEach((type, index) => {
 
 
 interface SceneManagerProps {
+  /** The data representing the scene, organized by chunks. */
   sceneData: SceneData;
+  /** The VoxelWorld instance where meshes will be added/removed. */
   voxelWorld: VoxelWorld | null;
 }
 
+/**
+ * React component responsible for managing the lifecycle of chunk meshes in the VoxelWorld.
+ *
+ * It observes changes to `sceneData`, triggers the greedy meshing worker, converts the
+ * worker output into Three.js meshes, and adds them to the `voxelWorld`.
+ *
+ * @param props - The component properties.
+ * @returns null - This component does not render any DOM elements itself.
+ */
 export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorld }) => {
   const meshes = useRef<Record<string, THREE.Mesh>>({});
 
