@@ -11,7 +11,9 @@ import ErrorBoundary from './ErrorBoundary';
 import { NeonLogo } from './components/NeonLogo';
 import "@copilotkit/react-ui/styles.css";
 
-// Header Component
+/**
+ * Header component displaying the logo and build status.
+ */
 const Header = () => (
   <header style={{
     height: '80px', // Increased height for the neon sign
@@ -32,6 +34,13 @@ const Header = () => (
   </header>
 );
 
+/**
+ * The main application logic component.
+ *
+ * It initializes the VoxelWorld, handles CopilotKit chat interactions,
+ * parses the AI responses to update the scene data, and renders the 3D viewer
+ * and UI overlays.
+ */
 function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
@@ -82,6 +91,9 @@ function VoxelApp() {
   );
 }
 
+/**
+ * Root component that sets up the ErrorBoundary and CopilotKit context provider.
+ */
 function App() {
   return (
     <ErrorBoundary>

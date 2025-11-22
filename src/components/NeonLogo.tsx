@@ -1,5 +1,9 @@
 import React from 'react';
 
+/**
+ * Renders the Voxelito logo with a neon glow effect using SVG filters.
+ * Includes simple flickering animation classes on specific letters.
+ */
 export const NeonLogo = () => {
   return (
     <div className="neon-logo-container" style={{ position: 'relative', padding: '10px' }}>

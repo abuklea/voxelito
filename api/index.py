@@ -34,24 +34,57 @@ load_dotenv(dotenv_path='api/.env.local')
 
 # --- Pydantic Models ---
 class Voxel(BaseModel):
+    """
+    Represents a single voxel in the 3D space.
+
+    Attributes:
+        x (int): The x-coordinate of the voxel.
+        y (int): The y-coordinate of the voxel.
+        z (int): The z-coordinate of the voxel.
+        type (str): The type/material of the voxel (e.g., 'grass', 'stone').
+    """
     x: int
     y: int
     z: int
     type: str
 
 class Chunk(BaseModel):
+    """
+    Represents a chunk of voxels in the scene.
+
+    Attributes:
+        position (list[int]): The position of the chunk as a list of integers.
+        voxels (list[Voxel]): A list of Voxel objects contained within this chunk.
+    """
     position: list[int]
     voxels: list[Voxel]
 
 class SceneData(BaseModel):
+    """
+    Container for the entire scene data.
+
+    Attributes:
+        chunks (list[Chunk]): A list of chunks that make up the scene.
+    """
     chunks: list[Chunk]
 
 class AI_SceneDescription(BaseModel):
-    """A 3D scene composed of voxels, organized in chunks."""
+    """
+    A 3D scene composed of voxels, organized in chunks.
+
+    Attributes:
+        scene (SceneData): The chunk and voxel data for the 3D scene.
+    """
     scene: SceneData = Field(description="The chunk and voxel data for the 3D scene.")
 
 # --- Agent Initialization ---
 def get_agent():
+    """
+    Initializes and returns the Pydantic AI Agent with the OpenAI model.
+
+    Returns:
+        Agent | None: The configured Agent instance if OPENAI_API_KEY is set, otherwise None.
+    """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
         logger.info(f"Initializing Agent with API Key: {api_key[:5]}...")
@@ -82,6 +115,19 @@ app.add_middleware(
 
 # --- Streaming Logic ---
 async def stream_handler(body: dict):
+    """
+    Async generator that handles the streaming response for the chat agent.
+
+    It parses the incoming request body to extract the user's prompt, runs the AI agent
+    synchronously within a thread pool, and yields the result as a Server-Sent Event (SSE).
+    The response is formatted to match the GraphQL structure expected by CopilotKit.
+
+    Args:
+        body (dict): The JSON body of the request containing variables and messages.
+
+    Yields:
+        str: A string formatted as an SSE data event containing the JSON-serialized GraphQL response.
+    """
     logger.info("Stream handler started")
     try:
         # Parsing logic for CopilotKit GraphQL request
@@ -161,6 +207,19 @@ async def stream_handler(body: dict):
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
+    """
+    Endpoint to handle agent generation requests.
+
+    This endpoint supports two types of operations:
+    1. "availableAgents" discovery: Returns a JSON list of available agents.
+    2. Chat generation: Streams the agent's response based on the user's prompt using SSE.
+
+    Args:
+        request (Request): The incoming FastAPI request object.
+
+    Returns:
+        JSONResponse | StreamingResponse: A JSON response for discovery or a streaming response for chat.
+    """
     logger.info("Received request at /api/generate")
     try:
         body = await request.json()

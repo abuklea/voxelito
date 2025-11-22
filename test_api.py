@@ -1,8 +1,15 @@
+"""
+Integration test script for the backend API.
+Tests the agent discovery mechanism and the chat stream endpoint.
+"""
 import requests
 import json
 import sys
 
 def test_discovery():
+    """
+    Tests the 'availableAgents' operation by sending a mock GraphQL query to the backend.
+    """
     print("Testing Discovery...")
     url = "http://localhost:8000/api/generate"
     payload = {
@@ -18,6 +25,10 @@ def test_discovery():
         print(f"Error: {e}")
 
 def test_chat():
+    """
+    Tests the chat generation stream by sending a sample prompt.
+    Consumes the streaming response and prints the chunks.
+    """
     print("\nTesting Chat Stream...")
     url = "http://localhost:8000/api/generate"
     # Minimal CopilotKit payload approximation

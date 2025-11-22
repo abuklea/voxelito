@@ -2,6 +2,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { VoxelWorld } from '../lib/VoxelWorld';
 
+/**
+ * Custom hook to manage the lifecycle of the VoxelWorld instance.
+ *
+ * It provides a callback ref to attach to a DOM element, which triggers the initialization
+ * of the VoxelWorld. It also handles the cleanup (disposal) of the world when the
+ * component unmounts.
+ *
+ * @returns An object containing:
+ * - `voxelWorld`: The active VoxelWorld instance or null.
+ * - `ref`: A callback ref to attach to the container div.
+ */
 export const useVoxelWorld = () => {
   const [voxelWorld, setVoxelWorld] = useState<VoxelWorld | null>(null);
 
