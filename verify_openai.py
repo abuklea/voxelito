@@ -1,7 +1,14 @@
+"""
+Verification script to check OpenAI API connectivity.
+"""
 import os
 from openai import OpenAI
 
 def verify_openai():
+    """
+    Checks if the OPENAI_API_KEY is set and attempts to make a simple API call
+    to verify that the key is valid and the client can connect.
+    """
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY not found in environment.")

@@ -1,11 +1,13 @@
 import React, { Suspense, useState, useEffect } from 'react';
-import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotChat, useCopilotReadable } from "@copilotkit/react-core";
 import { CopilotPopup } from "@copilotkit/react-ui";
 import { Viewer } from "./features/viewer/Viewer";
 import { SceneManager } from "./features/voxel-engine/SceneManager";
 import { InteractionController } from "./features/viewer/InteractionController";
 import { SelectionHighlighter } from "./features/viewer/SelectionHighlighter";
 import { useVoxelWorld } from './hooks/useVoxelWorld';
+import { useVoxelStore } from './store/voxelStore';
+import { Toolbar } from './components/Toolbar';
 import type { SceneData } from './types';
 import ErrorBoundary from './ErrorBoundary';
 import { NeonLogo } from './components/NeonLogo';
@@ -61,12 +63,39 @@ const Header: React.FC<HeaderProps> = ({ size, setSize }) => (
   </header>
 );
 
+/**
+ * The main application logic component.
+ */
 function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
   const [size, setSize] = useState("Medium");
-
   const { visibleMessages, isLoading } = useCopilotChat();
+
+  // --- Context for the Agent ---
+
+  // 1. Scene Data
+  useCopilotReadable({
+    description: "The current 3D scene structure (chunks and voxels).",
+    value: sceneData
+  });
+
+  // 2. Selection
+  useCopilotReadable({
+    description: "The current set of selected voxels. If non-empty, only modify these voxels or the area around them.",
+    value: selectedVoxels
+  });
+
+  // 3. Screenshot
+  useCopilotReadable({
+    description: "A screenshot of the current 3D viewport (Base64 encoded JPEG).",
+    value: () => {
+       if (voxelWorld) {
+           return voxelWorld.renderer.domElement.toDataURL('image/jpeg', 0.5);
+       }
+       return "No viewport available";
+    }
+  });
 
   useEffect(() => {
     if (!isLoading && visibleMessages.length > 0) {
@@ -74,7 +103,15 @@ function VoxelApp() {
 
       if (lastMessage.isTextMessage() && lastMessage.role === "assistant" && lastMessage.content) {
         try {
-          const parsed = JSON.parse(lastMessage.content);
+          let content = lastMessage.content;
+          // Handle Markdown blocks if present
+          if (content.includes("```json")) {
+              content = content.split("```json")[1].split("```")[0];
+          } else if (content.includes("```")) {
+               content = content.split("```")[1].split("```")[0];
+          }
+
+          const parsed = JSON.parse(content);
           if (parsed && Array.isArray(parsed.chunks)) {
             console.log("Valid scene data received, updating viewer...");
             setSceneData(parsed as SceneData);
@@ -93,6 +130,7 @@ function VoxelApp() {
         <Viewer ref={ref} />
         <InteractionController voxelWorld={voxelWorld} />
         <SelectionHighlighter voxelWorld={voxelWorld} />
+        <Toolbar />
         <Suspense fallback={<div style={{ color: 'white', padding: '20px' }}>Loading Voxel Engine...</div>}>
           {voxelWorld && sceneData && (
             <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
@@ -100,7 +138,7 @@ function VoxelApp() {
         </Suspense>
       </div>
       <CopilotPopup
-        instructions={`You are a voxel scene generator. The user has selected the scene size: ${size} (${SIZES[size as keyof typeof SIZES]}). Ensure your generated shapes fit loosely within this volume. Center the scene at 0,0,0 roughly.`}
+        instructions="You are a helper that generates 3D voxel scenes. You can see the current scene and selection."
         labels={{
           title: "Voxelito",
           initial: "Describe a scene to generate!",
@@ -110,6 +148,9 @@ function VoxelApp() {
   );
 }
 
+/**
+ * Root component that sets up the ErrorBoundary and CopilotKit context provider.
+ */
 function App() {
   return (
     <ErrorBoundary>

@@ -27,9 +27,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
-# Force fallback manual handler
-AGUIAdapter = None
-
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
 
@@ -315,12 +312,13 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
         ))
 
     return response_chunks
+class AI_SceneDescription(BaseModel):
+    scene: SceneData = Field(description="The chunk and voxel data for the 3D scene.")
 
 # --- Agent Initialization ---
 def get_agent(system_extension: str = ""):
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
-        logger.info(f"Initializing Agent with API Key: {api_key[:5]}...")
         return Agent(
             "openai:gpt-4o",
             output_type=SceneDescription,
@@ -334,6 +332,16 @@ def get_agent(system_extension: str = ""):
                 "For 'landscape', use large boxes or spheres to approximate terrain.\n"
                 "Be generous with scale. A building might be 10x20x10.\n" +
                 system_extension
+                "You will receive context about the current scene state, user selection, and a screenshot.\n"
+                "RULES:\n"
+                "1. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
+                "2. If no selection is provided, you may generate or modify the entire scene.\n"
+                "3. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
+                "4. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
+                "5. Supported Voxel Types: 'grass', 'stone', 'dirt', 'water', 'wood', 'leaves', 'sand', "
+                "'brick', 'roof', 'glass', 'plank', 'concrete', 'asphalt', 'road_white', 'road_yellow', "
+                "'neon_blue', 'neon_pink', 'metal', 'snow', 'lava'.\n"
+                "6. Return the full scene data including your changes, or at least the chunks you modified."
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -355,25 +363,43 @@ async def stream_handler(body: dict):
     try:
         variables = body.get("variables", {})
         data = variables.get("data", {})
-
         messages = data.get("messages", [])
         if not messages:
             messages = body.get("messages", [])
 
-        if messages:
-            last_message = messages[-1]
-            if "textMessage" in last_message:
-                prompt = last_message["textMessage"].get("content", "")
+        # Construct the conversation history / prompt
+        # We want to include the System Context (Readable) if present
+
+        full_context = "User Context:\n"
+        user_prompt = ""
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = ""
+            if "textMessage" in msg:
+                content = msg["textMessage"].get("content", "")
             else:
-                prompt = last_message.get("content", "")
-        else:
-            prompt = ""
+                content = msg.get("content", "")
 
-        logger.info(f"Prompt extracted: {prompt}")
+            # CopilotKit might send readable context as system messages
+            if role == "system":
+                full_context += f"[System Context]: {content}\n"
+            elif role == "user":
+                # Keep the last user prompt as the main prompt, but append previous?
+                # For simplicity, let's concatenate everything relevant
+                user_prompt = content # Assume last user message is the prompt
+                # If there's history, we might want to append it too, but let's focus on current state + prompt
 
-        if not prompt:
-            yield f"data: {json.dumps({'error': 'No prompt found'})}\n\n"
-            return
+            # Check for screenshot in content (if text)
+            if "image" in content or "base64" in content:
+                 full_context += "[Screenshot provided]\n"
+
+        # Fallback: If we can't find explicit system messages, we rely on the user prompt
+        # containing the context if CopilotKit injected it there.
+
+        final_prompt = f"{full_context}\n\nUser Request: {user_prompt}"
+
+        logger.info(f"Running agent with prompt length: {len(final_prompt)}")
 
         # Extract system instructions from previous messages
         extra_system_prompt = ""
@@ -435,7 +461,6 @@ async def stream_handler(body: dict):
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
-    logger.info("Received request at /api/generate")
     try:
         body = await request.json()
     except Exception as e:
@@ -454,7 +479,6 @@ async def run_agent_custom(request: Request):
                     "__typename": "AvailableAgents"
                 }
             }
-        }
-        return JSONResponse(content=discovery_data)
+        })
 
     return StreamingResponse(stream_handler(body), media_type="text/event-stream")

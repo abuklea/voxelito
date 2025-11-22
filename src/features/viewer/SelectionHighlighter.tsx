@@ -7,52 +7,73 @@ interface SelectionHighlighterProps {
   voxelWorld: VoxelWorld | null;
 }
 
+/**
+ * Renders the selected voxels using an InstancedMesh for performance.
+ */
 export const SelectionHighlighter: React.FC<SelectionHighlighterProps> = ({ voxelWorld }) => {
-  const selectedVoxel = useVoxelStore((state) => state.selectedVoxel);
-  const highlightMeshRef = useRef<THREE.LineSegments | null>(null);
+  const selectedVoxels = useVoxelStore((state) => state.selectedVoxels);
+  const meshRef = useRef<THREE.InstancedMesh | null>(null);
 
+  // Initialize the InstancedMesh
   useEffect(() => {
     if (!voxelWorld) return;
 
-    // Create the highlight mesh if it doesn't exist
-    if (!highlightMeshRef.current) {
-      const boxGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
-      const geometry = new THREE.EdgesGeometry(boxGeo);
-      boxGeo.dispose(); // Dispose the intermediate geometry
-      const material = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 }); // Cyan color
-      const mesh = new THREE.LineSegments(geometry, material);
-      mesh.visible = false; // Initially hidden
-      voxelWorld.scene.add(mesh);
-      highlightMeshRef.current = mesh;
-    }
+    // Geometry: Slightly larger than 1x1x1 to overlay
+    const geometry = new THREE.BoxGeometry(1.01, 1.01, 1.01);
 
-    const mesh = highlightMeshRef.current;
+    // Material: Semi-transparent cyan
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false, // Don't write to depth buffer (transparency issue fix)
+      side: THREE.DoubleSide,
+    });
 
-    if (selectedVoxel) {
-      const [x, y, z] = selectedVoxel.position;
-      // BoxGeometry is centered, so we need to offset by 0.5 to match voxel grid which starts at integer corners
-      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-      mesh.visible = true;
-    } else {
-      mesh.visible = false;
-    }
+    // Max instances: Estimate max selection. 100k is a safe buffer for WebGL 2.
+    // Dynamic resizing of InstancedMesh is possible but tricky.
+    const maxCount = 10000;
+    const mesh = new THREE.InstancedMesh(geometry, material, maxCount);
+    mesh.count = 0; // Start hidden
 
-    voxelWorld.requestRender();
+    // Mark as non-raycastable so we don't select the highlight itself
+    mesh.raycast = () => {};
 
-  }, [voxelWorld, selectedVoxel]);
+    voxelWorld.scene.add(mesh);
+    meshRef.current = mesh;
 
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
-      if (voxelWorld && highlightMeshRef.current) {
-        voxelWorld.scene.remove(highlightMeshRef.current);
-        highlightMeshRef.current.geometry.dispose();
-        (highlightMeshRef.current.material as THREE.Material).dispose();
-        highlightMeshRef.current = null;
+      if (voxelWorld && meshRef.current) {
+        voxelWorld.scene.remove(meshRef.current);
+        meshRef.current.dispose();
+        geometry.dispose();
+        material.dispose();
+        meshRef.current = null;
         voxelWorld.requestRender();
       }
     };
   }, [voxelWorld]);
+
+  // Update instances when selection changes
+  useEffect(() => {
+    if (!meshRef.current || !voxelWorld) return;
+
+    const voxels = Object.values(selectedVoxels);
+    const count = Math.min(voxels.length, meshRef.current.instanceMatrix.count);
+    meshRef.current.count = count;
+
+    const dummy = new THREE.Object3D();
+
+    for (let i = 0; i < count; i++) {
+      const { position } = voxels[i];
+      dummy.position.set(position[0] + 0.5, position[1] + 0.5, position[2] + 0.5);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
+    }
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    voxelWorld.requestRender();
+  }, [selectedVoxels, voxelWorld]);
 
   return null;
 };

@@ -1,5 +1,9 @@
 import type { VoxelPalette } from "../../types";
 
+/**
+ * Defines the available voxel types and their associated properties (e.g., color).
+ * This serves as the single source of truth for voxel materials in the application.
+ */
 export const palette: VoxelPalette = {
   air: { color: "#000000" },
   grass: { color: "#00ff00" },
