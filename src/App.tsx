@@ -71,6 +71,8 @@ function VoxelApp() {
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
   const [size, setSize] = useState("Medium");
   const { visibleMessages, isLoading } = useCopilotChat();
+  const voxelStore = useVoxelStore();
+  const currentSelection = voxelStore?.selectedVoxels || {};
 
   // --- Context for the Agent ---
 
@@ -82,8 +84,8 @@ function VoxelApp() {
 
   // 2. Selection
   useCopilotReadable({
-    description: "The current set of selected voxels. If non-empty, only modify these voxels or the area around them.",
-    value: selectedVoxels
+    description: "The current set of selected voxels. If non-empty, only modify these voxels or the area around them. Format: List of [x, y, z] coordinates.",
+    value: Object.values(currentSelection).map(v => v.position)
   });
 
   // 3. Screenshot

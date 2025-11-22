@@ -68,6 +68,29 @@ PALETTE = [
   "road_yellow", "neon_blue", "neon_pink", "metal", "snow", "lava"
 ]
 PALETTE_MAP = {name: i for i, name in enumerate(PALETTE)}
+PALETTE_DESCRIPTIONS = {
+    "air": "Empty space",
+    "grass": "Green grassy terrain, good for ground",
+    "stone": "Gray natural stone",
+    "dirt": "Brown soil",
+    "water": "Blue water liquid",
+    "wood": "Brown wood log",
+    "leaves": "Green leaves for trees",
+    "sand": "Yellow sand",
+    "brick": "Red brick wall",
+    "roof": "Dark brown roofing for houses",
+    "glass": "Transparent glass",
+    "plank": "Light wood planks for floors/buildings",
+    "concrete": "Gray concrete",
+    "asphalt": "Dark gray asphalt for roads",
+    "road_white": "Asphalt with white line for road markings",
+    "road_yellow": "Asphalt with yellow line for road markings",
+    "neon_blue": "Glowing cyan/blue light",
+    "neon_pink": "Glowing pink light",
+    "metal": "Shiny metal surface",
+    "snow": "White snow",
+    "lava": "Glowing orange lava"
+}
 MIN_COORD = -512
 MAX_COORD = 512
 
@@ -312,8 +335,6 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
         ))
 
     return response_chunks
-class AI_SceneDescription(BaseModel):
-    scene: SceneData = Field(description="The chunk and voxel data for the 3D scene.")
 
 # --- Agent Initialization ---
 def get_agent(system_extension: str = ""):
@@ -323,24 +344,23 @@ def get_agent(system_extension: str = ""):
             "openai:gpt-4o",
             output_type=SceneDescription,
             system_prompt=(
-                "You are a voxel scene generator. Generate 3D scenes based on the user's prompt.\n"
+                "You are an expert voxel scene generator. Generate complex and visually impressive 3D scenes based on the user's prompt.\n"
                 "Instead of listing every voxel, you must define the scene using high-level shapes (Box, Sphere, Pyramid).\n"
                 "Coordinates are integers. 1 unit = 1 voxel.\n"
                 "The ground is usually at y=0 or y=-1.\n"
-                "Available materials: " + ", ".join(PALETTE) + ".\n"
+                "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
+                "IMPORTANT: Use materials intelligently and creatively. Do NOT randomly assign variants. For example, use 'concrete' for sidewalks, 'asphalt' for roads, 'glass' for windows, 'brick' for walls. Use 'neon_blue' and 'neon_pink' for accents or cyberpunk themes. Create visual interest.\n"
                 "For complex scenes like 'city', generate multiple boxes for buildings, roads as flat boxes, etc.\n"
                 "For 'landscape', use large boxes or spheres to approximate terrain.\n"
                 "Be generous with scale. A building might be 10x20x10.\n" +
-                system_extension
-                "You will receive context about the current scene state, user selection, and a screenshot.\n"
+                system_extension +
+                "\nYou will receive context about the current scene state, user selection, and a screenshot.\n"
                 "RULES:\n"
                 "1. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
                 "2. If no selection is provided, you may generate or modify the entire scene.\n"
                 "3. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
                 "4. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
-                "5. Supported Voxel Types: 'grass', 'stone', 'dirt', 'water', 'wood', 'leaves', 'sand', "
-                "'brick', 'roof', 'glass', 'plank', 'concrete', 'asphalt', 'road_white', 'road_yellow', "
-                "'neon_blue', 'neon_pink', 'metal', 'snow', 'lava'.\n"
+                "5. Supported Voxel Types: " + ", ".join(PALETTE) + ".\n"
                 "6. Return the full scene data including your changes, or at least the chunks you modified."
             )
         )
@@ -416,7 +436,7 @@ async def stream_handler(body: dict):
 
         # Run the agent
         logger.info("Running agent...")
-        result = await agent.run(prompt)
+        result = await agent.run(final_prompt)
         logger.info("Agent run complete. Rasterizing...")
 
         # Rasterize
@@ -479,6 +499,7 @@ async def run_agent_custom(request: Request):
                     "__typename": "AvailableAgents"
                 }
             }
-        })
+        }
+        return JSONResponse(discovery_data)
 
     return StreamingResponse(stream_handler(body), media_type="text/event-stream")
