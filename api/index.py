@@ -348,6 +348,7 @@ def get_agent(system_extension: str = ""):
                 "Instead of listing every voxel, you must define the scene using high-level shapes (Box, Sphere, Pyramid).\n"
                 "Coordinates are integers. 1 unit = 1 voxel.\n"
                 "The ground is usually at y=0 or y=-1.\n"
+                "IMPORTANT: You must position the scene so its center is at (0, 0, 0). The camera is pointed at the origin. Ensure the main elements are centered.\n"
                 "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
                 "IMPORTANT: Use materials intelligently and creatively. Do NOT randomly assign variants. For example, use 'concrete' for sidewalks, 'asphalt' for roads, 'glass' for windows, 'brick' for walls. Use 'neon_blue' and 'neon_pink' for accents or cyberpunk themes. Create visual interest.\n"
                 "For complex scenes like 'city', generate multiple boxes for buildings, roads as flat boxes, etc.\n"

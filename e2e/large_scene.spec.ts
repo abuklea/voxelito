@@ -50,6 +50,23 @@ test.describe('Large Scene Generation', () => {
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'large_city_3_rendered.png') });
 
+    // Enable auto-rotate for multiple angles
+    console.log('Enabling auto-rotate...');
+    await page.evaluate(() => {
+        // @ts-ignore
+        if (window.voxelWorld) {
+            // @ts-ignore
+            window.voxelWorld.setAutoRotate(true);
+        }
+    });
+
+    // Take sequence of screenshots to capture different angles
+    for (let i = 0; i < 4; i++) {
+        await page.waitForTimeout(3000);
+        console.log(`Taking rotation screenshot ${i}...`);
+        await page.screenshot({ path: path.join(SCREENSHOT_DIR, `large_city_rotate_${i}.png`) });
+    }
+
     // Simple visual verification (check if canvas is present)
     await expect(page.locator('canvas')).toBeVisible();
   });
