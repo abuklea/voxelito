@@ -4,6 +4,7 @@ import { useVoxelMesher } from '../../hooks/useVoxelMesher';
 import { VoxelWorld } from '../../lib/VoxelWorld';
 import type { SceneData } from '../../types';
 import { generateTextureAtlas, type TextureAtlasResult } from './TextureManager';
+import { VoxelModel, CHUNK_SIZE } from '../../lib/VoxelModel';
 
 interface SceneManagerProps {
   /** The data representing the scene, organized by chunks. */
@@ -13,17 +14,13 @@ interface SceneManagerProps {
 }
 
 /**
- * React component responsible for managing the lifecycle of chunk meshes in the VoxelWorld.
- *
- * It observes changes to `sceneData`, triggers the greedy meshing worker, converts the
- * worker output into Three.js meshes, and adds them to the `voxelWorld`.
- *
- * @param props - The component properties.
- * @returns null - This component does not render any DOM elements itself.
+ * React component responsible for managing the lifecycle of chunk meshes.
+ * Utilizes VoxelModel for efficient data storage and dirty-checking.
  */
 export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorld }) => {
   const meshes = useRef<Record<string, THREE.Mesh>>({});
   const [atlasData, setAtlasData] = useState<TextureAtlasResult | null>(null);
+  const voxelModel = useRef(new VoxelModel());
 
   useEffect(() => {
     generateTextureAtlas().then(setAtlasData);
@@ -62,7 +59,6 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
           const vertexIndex = i % 4;
 
           let lu = 0, lv = 0;
-          // Assuming standard Quad order (BL, BR, TR, TL)
           if (vertexIndex === 0) { lu = 0; lv = 0; }
           else if (vertexIndex === 1) { lu = 1; lv = 0; }
           else if (vertexIndex === 2) { lu = 1; lv = 1; }
@@ -84,6 +80,8 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
     }
 
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     const [x, y, z] = chunkId.split(',').map(Number);
     mesh.position.set(x * 32, y * 32, z * 32);
     meshes.current[chunkId] = mesh;
@@ -94,6 +92,9 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
 
   useEffect(() => {
     if (!sceneData || !sceneData.chunks || !atlasData) return;
+
+    // Load data into model
+    voxelModel.current.loadSceneData(sceneData, atlasData.typeToIds);
 
     // Clean up meshes that are not in the new scene data
     const activeChunkIds = new Set(sceneData.chunks.map(c => c.position.join(',')));
@@ -107,45 +108,16 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
         }
     }
 
-    for (const chunk of sceneData.chunks) {
-      const chunkId = chunk.position.join(',');
-      const chunkData = new Uint8Array(32 * 32 * 32);
+    // Process dirty chunks
+    voxelModel.current.dirtyChunks.forEach(chunkId => {
+        const [cx, cy, cz] = chunkId.split(',').map(Number);
+        const chunk = voxelModel.current.getChunk(cx, cy, cz);
+        if (chunk) {
+            meshChunk(chunkId, chunk, [CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE]);
+        }
+    });
+    voxelModel.current.clearDirtyFlags();
 
-      const localToGlobalVars = chunk.palette.map(p => {
-          if (atlasData.typeToIds[p]) return atlasData.typeToIds[p];
-          return [0];
-      });
-
-      let writeIndex = 0;
-      if (chunk.rle_data) {
-          const rleParts = chunk.rle_data.split(',');
-          for (const part of rleParts) {
-              if (!part) continue;
-              const [localIdStr, countStr] = part.split(':');
-              const localId = parseInt(localIdStr, 10);
-              const count = parseInt(countStr, 10);
-
-              const variations = localToGlobalVars[localId];
-
-              if (writeIndex + count > chunkData.length) break;
-
-              if (variations.length === 1 && variations[0] === 0) {
-                  chunkData.fill(0, writeIndex, writeIndex + count);
-              } else {
-                  for (let k = 0; k < count; k++) {
-                      const idx = writeIndex + k;
-                      // Simple deterministic hash
-                      const seed = idx + (chunk.position[0] * 73856093) ^ (chunk.position[1] * 19349663) ^ (chunk.position[2] * 83492791);
-                      const varIndex = Math.abs(seed) % variations.length;
-                      chunkData[idx] = variations[varIndex];
-                  }
-              }
-              writeIndex += count;
-          }
-      }
-
-      meshChunk(chunkId, chunkData, [32, 32, 32]);
-    }
   }, [sceneData, meshChunk, voxelWorld, atlasData]);
 
   return null;
