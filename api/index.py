@@ -338,6 +338,15 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
 
 # --- Agent Initialization ---
 def get_agent(system_extension: str = ""):
+    """
+    Initializes and returns the Pydantic AI agent.
+
+    Args:
+        system_extension: Additional system prompt instructions derived from context.
+
+    Returns:
+        Agent: The configured Pydantic AI agent instance, or None if API key is missing.
+    """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
         return Agent(
@@ -380,6 +389,18 @@ app.add_middleware(
 
 # --- Streaming Logic ---
 async def stream_handler(body: dict):
+    """
+    Handles the streaming response for the CopilotKit agent.
+
+    Processes the request body, extracts messages, runs the agent,
+    rasterizes the result, and streams the GraphQL response via SSE.
+
+    Args:
+        body: The JSON body of the request containing variables and messages.
+
+    Yields:
+        str: Server-Sent Events (SSE) data strings.
+    """
     logger.info("Stream handler started")
     try:
         variables = body.get("variables", {})
@@ -459,13 +480,16 @@ async def stream_handler(body: dict):
         }
         json_str = json.dumps(scene_data)
 
+        # Wrap in Markdown block so frontend can parse it, and add a friendly message.
+        response_text = f"I've generated the scene based on your request.\n\n```json\n{json_str}\n```"
+
         graphql_response = {
             "data": {
                 "generateCopilotResponse": {
                     "messages": [
                         {
                             "__typename": "TextMessageOutput",
-                            "content": [json_str],
+                            "content": [response_text],
                             "role": "assistant",
                             "id": "msg_response"
                         }
@@ -482,6 +506,17 @@ async def stream_handler(body: dict):
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
+    """
+    Main endpoint for CopilotKit interaction.
+
+    Handles agent discovery and chat generation requests.
+
+    Args:
+        request: The FastAPI request object.
+
+    Returns:
+        JSONResponse or StreamingResponse: The agent response or discovery data.
+    """
     try:
         body = await request.json()
     except Exception as e:

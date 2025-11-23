@@ -105,7 +105,28 @@ test.describe('Voxelito E2E Tests', () => {
         await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_2_response.png`) });
 
         // 5. Verify Scene Rendering
-        await page.waitForTimeout(5000);
+        console.log('Waiting for voxels to be generated...');
+
+        // Poll for voxels (InstancedMesh in scene)
+        try {
+            await page.waitForFunction(() => {
+                // @ts-ignore
+                if (window.voxelWorld && window.voxelWorld.scene) {
+                    // @ts-ignore
+                    const scene = window.voxelWorld.scene;
+                    // Check for InstancedMesh which is likely the chunks
+                    // @ts-ignore
+                    return scene.children.some(c => c.type === 'InstancedMesh' || c.isInstancedMesh);
+                }
+                return false;
+            }, { timeout: 60000 });
+            console.log('Voxels detected in scene.');
+        } catch (e) {
+            console.log('Timed out waiting for voxels.');
+        }
+
+        // Wait a bit for rendering to settle
+        await page.waitForTimeout(2000);
 
         // Zoom out to see the full model
         await page.evaluate(() => {
