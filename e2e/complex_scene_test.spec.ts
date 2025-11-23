@@ -68,7 +68,7 @@ test.describe('Complex Scene Generation', () => {
         if (window.voxelWorld) {
             // @ts-ignore
             // Set camera position further back and up
-            window.voxelWorld.camera.position.set(0, 40, 60); // Lower/Closer to ensure visibility
+            window.voxelWorld.camera.position.set(0, 100, 100); // Further out to ensure full visibility
             // @ts-ignore
             window.voxelWorld.controls.target.set(0, 0, 0); // Look at origin
             // @ts-ignore

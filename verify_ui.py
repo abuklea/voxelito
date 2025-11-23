@@ -18,8 +18,8 @@ def verify_ui():
             # Navigate to the app
             page.goto("http://localhost:5173")
 
-            # Wait for the app to load (check for VoxelVerse header)
-            page.wait_for_selector("text=VOXELVERSE", timeout=10000)
+            # Wait for the app to load (check for Voxelito header)
+            page.wait_for_selector("text=Voxelito", timeout=10000)
 
             # Wait for the chat popup to be visible (CopilotKit)
             page.wait_for_selector(".copilotKitButton", timeout=10000)
@@ -31,6 +31,18 @@ def verify_ui():
             page.wait_for_selector(".copilotKitPopup", timeout=5000)
 
             # Take a screenshot of the entire UI with the open chat
+
+            # Adjust camera to see the full scene
+            page.evaluate("""
+                if (window.voxelWorld) {
+                    window.voxelWorld.camera.position.set(0, 60, 60);
+                    window.voxelWorld.controls.target.set(0, 0, 0);
+                    window.voxelWorld.controls.update();
+                    window.voxelWorld.requestRender();
+                }
+            """)
+            page.wait_for_timeout(1000)
+
             page.screenshot(path="verification.png")
             print("Screenshot captured: verification.png")
 

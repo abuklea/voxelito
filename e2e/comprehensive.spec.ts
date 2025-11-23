@@ -106,6 +106,23 @@ test.describe('Voxelito E2E Tests', () => {
 
         // 5. Verify Scene Rendering
         await page.waitForTimeout(5000);
+
+        // Zoom out to see the full model
+        await page.evaluate(() => {
+            // @ts-ignore
+            if (window.voxelWorld) {
+                // @ts-ignore
+                window.voxelWorld.camera.position.set(0, 60, 60);
+                // @ts-ignore
+                window.voxelWorld.controls.target.set(0, 0, 0);
+                // @ts-ignore
+                window.voxelWorld.controls.update();
+                // @ts-ignore
+                window.voxelWorld.requestRender();
+            }
+        });
+        await page.waitForTimeout(1000);
+
         await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_3_scene.png`) });
     });
   }
