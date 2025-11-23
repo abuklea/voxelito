@@ -25,6 +25,7 @@ api/.env.local
 *.sw?
 
 test-results/
+playwright-report/
 
 # Python
 __pycache__/
