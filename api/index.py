@@ -482,9 +482,10 @@ def get_agent(system_extension: str = ""):
                 "\n" + system_extension + "\n"
                 "RULES:\n"
                 "1. Output must be an AgentResponse.\n"
-                "2. Provide 'commentary' explaining your artistic choices.\n"
+                "2. Provide 'commentary' explaining your artistic choices AND your process. Explain what you are building step-by-step (e.g., 'First, I am laying the foundation...'). This serves as a progress indication for the user.\n"
                 "3. Center the main elements at (0,0,0).\n"
-                "4. If 'selectedVoxels' are present, edit that area.\n"
+                "4. If 'selectedVoxels' are present, ONLY edit that area or the immediate surroundings. Acknowledge the selection in your commentary.\n"
+                "5. Be conversational and engaging. Ask clarifying questions if the request is vague, but still provide a best-guess scene.\n"
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -538,6 +539,8 @@ async def stream_handler(body: dict):
                 if isinstance(content, str):
                     extra_system_prompt += content + "\n"
 
+        logger.info(f"Extra System Prompt (Context): {extra_system_prompt[:500]}...")
+
         agent = get_agent(extra_system_prompt)
         if not agent:
             yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
@@ -576,6 +579,7 @@ async def stream_handler(body: dict):
             }
         }
 
+        logger.info("Stream handler finished, yielding response")
         yield f"data: {json.dumps(graphql_response)}\n\n"
 
     except Exception as e:
