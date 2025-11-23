@@ -107,16 +107,16 @@ test.describe('Voxelito E2E Tests', () => {
         // 5. Verify Scene Rendering
         console.log('Waiting for voxels to be generated...');
 
-        // Poll for voxels (InstancedMesh in scene)
+        // Poll for voxels (Mesh with BufferGeometry in scene)
         try {
             await page.waitForFunction(() => {
                 // @ts-ignore
                 if (window.voxelWorld && window.voxelWorld.scene) {
                     // @ts-ignore
                     const scene = window.voxelWorld.scene;
-                    // Check for InstancedMesh which is likely the chunks
+                    // Check for chunk meshes (Mesh with BufferGeometry)
                     // @ts-ignore
-                    return scene.children.some(c => c.type === 'InstancedMesh' || c.isInstancedMesh);
+                    return scene.children.some(c => c.isMesh && c.geometry.type === 'BufferGeometry');
                 }
                 return false;
             }, { timeout: 60000 });
@@ -171,7 +171,7 @@ test.describe('Voxelito E2E Tests', () => {
              // @ts-ignore
              if (window.voxelWorld && window.voxelWorld.scene) {
                 // @ts-ignore
-                return window.voxelWorld.scene.children.some(c => c.type === 'InstancedMesh' || c.isInstancedMesh);
+                return window.voxelWorld.scene.children.some(c => c.isMesh && c.geometry.type === 'BufferGeometry');
              }
              return false;
         }, { timeout: 120000 }); // Longer timeout for complex scene
