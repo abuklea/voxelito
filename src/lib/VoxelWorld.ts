@@ -23,10 +23,11 @@ export class VoxelWorld {
    * @param container - The HTMLDivElement where the renderer's canvas will be appended.
    */
   constructor(container: HTMLDivElement) {
+    console.log("VoxelWorld initialized with FOG 300");
     // Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f0f16); // Dark background match
-    this.scene.fog = new THREE.Fog(0x0f0f16, 10, 50); // Add fog for depth
+    this.scene.fog = new THREE.Fog(0x0f0f16, 50, 300); // Add fog for depth
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
@@ -54,7 +55,7 @@ export class VoxelWorld {
     this.scene.add(directionalLight);
 
     // Accent Light (Purple)
-    const pointLight = new THREE.PointLight(0x7c3aed, 0.8, 50);
+    const pointLight = new THREE.PointLight(0x7c3aed, 0.8, 200);
     pointLight.position.set(-10, 10, -10);
     this.scene.add(pointLight);
 

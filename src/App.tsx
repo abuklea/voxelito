@@ -23,9 +23,10 @@ const SIZES = {
 interface HeaderProps {
   size: string;
   setSize: (s: string) => void;
+  isLoading: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ size, setSize }) => (
+const Header: React.FC<HeaderProps> = ({ size, setSize, isLoading }) => (
   <header style={{
     height: '80px',
     backgroundColor: 'var(--bg-secondary)',
@@ -56,12 +57,49 @@ const Header: React.FC<HeaderProps> = ({ size, setSize }) => (
             ))}
           </select>
       </div>
+      {isLoading && (
+          <div style={{
+              color: '#7c3aed',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: 'rgba(124, 58, 237, 0.1)',
+              padding: '5px 10px',
+              borderRadius: '4px',
+              border: '1px solid rgba(124, 58, 237, 0.3)'
+          }}>
+              <div className="spinner" style={{
+                  width: '16px', height: '16px',
+                  border: '2px solid #7c3aed',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+              }}/>
+              <span>Agent Working...</span>
+          </div>
+      )}
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
     </div>
     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
       ALPHA BUILD
     </div>
   </header>
 );
+
+function mergeSceneData(current: SceneData | null, incoming: SceneData): SceneData {
+  if (!current) return incoming;
+
+  const chunkMap = new Map<string, any>();
+  // Keep existing chunks
+  current.chunks.forEach(c => chunkMap.set(c.position.join(','), c));
+  // Overwrite with incoming chunks (updated or new)
+  incoming.chunks.forEach(c => chunkMap.set(c.position.join(','), c));
+
+  return {
+    chunks: Array.from(chunkMap.values())
+  };
+}
 
 /**
  * The main application logic component.
@@ -123,7 +161,7 @@ function VoxelApp() {
           const parsed = JSON.parse(content);
           if (parsed && Array.isArray(parsed.chunks)) {
             console.log("Valid scene data received, updating viewer...");
-            setSceneData(parsed as SceneData);
+            setSceneData(prev => mergeSceneData(prev, parsed as SceneData));
           }
         } catch (e) {
            // Ignore non-JSON
@@ -134,12 +172,12 @@ function VoxelApp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-primary)' }}>
-      <Header size={size} setSize={setSize} />
+      <Header size={size} setSize={setSize} isLoading={isLoading} />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Viewer ref={ref} />
         <InteractionController voxelWorld={voxelWorld} />
         <SelectionHighlighter voxelWorld={voxelWorld} />
-        <Toolbar />
+        <Toolbar voxelWorld={voxelWorld} />
         <Suspense fallback={<div style={{ color: 'white', padding: '20px' }}>Loading Voxel Engine...</div>}>
           {voxelWorld && sceneData && (
             <SceneManager sceneData={sceneData} voxelWorld={voxelWorld} />
@@ -147,7 +185,7 @@ function VoxelApp() {
         </Suspense>
       </div>
       <CopilotPopup
-        instructions="You are a helper that generates 3D voxel scenes. You can see the current scene and selection."
+        instructions="You are a helper that generates 3D voxel scenes. You can see the current scene and selection. Explain your actions."
         labels={{
           title: "Voxelito",
           initial: "Describe a scene to generate!",

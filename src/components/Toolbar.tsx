@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useVoxelStore } from '../store/voxelStore';
 import type { SelectionTool, SelectionMode } from '../store/voxelStore';
+import type { VoxelWorld } from '../lib/VoxelWorld';
+
+interface ToolbarProps {
+  voxelWorld: VoxelWorld | null;
+}
 
 const tools: { id: SelectionTool; label: string }[] = [
   { id: 'cursor', label: 'Cursor' },
@@ -14,7 +19,7 @@ const modes: { id: SelectionMode; label: string }[] = [
   { id: 'subtract', label: 'Sub (+Alt)' },
 ];
 
-export const Toolbar: React.FC = () => {
+export const Toolbar: React.FC<ToolbarProps> = ({ voxelWorld }) => {
   const {
     selectionTool,
     setSelectionTool,
@@ -24,6 +29,41 @@ export const Toolbar: React.FC = () => {
     setBrushSize,
     clearSelection,
   } = useVoxelStore();
+
+  const [autoRotate, setAutoRotate] = useState(false);
+
+  useEffect(() => {
+    if (voxelWorld) {
+        voxelWorld.setAutoRotate(autoRotate);
+    }
+  }, [autoRotate, voxelWorld]);
+
+  const handleResetView = () => {
+    if (voxelWorld) {
+        // Isometric-ish view
+        voxelWorld.camera.position.set(50, 50, 50);
+        // Look at origin
+        voxelWorld.controls.target.set(0, 0, 0);
+        voxelWorld.controls.update();
+        voxelWorld.requestRender();
+    }
+  };
+
+  const buttonStyle = {
+    flex: 1,
+    padding: '5px',
+    backgroundColor: '#333',
+    border: 'none',
+    borderRadius: '4px',
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '0.8rem'
+  };
+
+  const activeButtonStyle = {
+    ...buttonStyle,
+    backgroundColor: '#7c3aed'
+  };
 
   return (
     <div style={{
@@ -43,22 +83,31 @@ export const Toolbar: React.FC = () => {
       zIndex: 100
     }}>
       <div>
+        <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '5px' }}>CAMERA</div>
+        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+            <button
+                onClick={handleResetView}
+                style={buttonStyle}
+            >
+                Reset View
+            </button>
+            <button
+                onClick={() => setAutoRotate(!autoRotate)}
+                style={autoRotate ? activeButtonStyle : buttonStyle}
+            >
+                {autoRotate ? 'Stop Rotate' : 'Auto Rotate'}
+            </button>
+        </div>
+      </div>
+
+      <div>
         <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '5px' }}>TOOL</div>
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
           {tools.map((t) => (
             <button
               key={t.id}
               onClick={() => setSelectionTool(t.id)}
-              style={{
-                flex: 1,
-                padding: '5px',
-                backgroundColor: selectionTool === t.id ? '#7c3aed' : '#333',
-                border: 'none',
-                borderRadius: '4px',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
+              style={selectionTool === t.id ? activeButtonStyle : buttonStyle}
             >
               {t.label}
             </button>
@@ -73,16 +122,7 @@ export const Toolbar: React.FC = () => {
             <button
               key={m.id}
               onClick={() => setSelectionMode(m.id)}
-              style={{
-                flex: 1,
-                padding: '5px',
-                backgroundColor: selectionMode === m.id ? '#7c3aed' : '#333',
-                border: 'none',
-                borderRadius: '4px',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
+              style={selectionMode === m.id ? activeButtonStyle : buttonStyle}
             >
               {m.label}
             </button>
@@ -108,12 +148,8 @@ export const Toolbar: React.FC = () => {
       <button
         onClick={clearSelection}
         style={{
-          padding: '8px',
+          ...buttonStyle,
           backgroundColor: '#dc2626',
-          border: 'none',
-          borderRadius: '4px',
-          color: 'white',
-          cursor: 'pointer',
           marginTop: '5px'
         }}
       >

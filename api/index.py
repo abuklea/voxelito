@@ -73,7 +73,7 @@ PALETTE = [
 ]
 PALETTE_MAP = {name: i for i, name in enumerate(PALETTE)}
 PALETTE_DESCRIPTIONS = {
-    "air": "Empty space",
+    "air": "Empty space (use to clear areas)",
     "grass": "Green grassy terrain, good for ground",
     "stone": "Gray natural stone",
     "dirt": "Brown soil",
@@ -344,12 +344,6 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
 def get_agent(system_extension: str = ""):
     """
     Initializes and returns the Pydantic AI agent.
-
-    Args:
-        system_extension: Additional system prompt instructions derived from context.
-
-    Returns:
-        Agent: The configured Pydantic AI agent instance, or None if API key is missing.
     """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
@@ -361,9 +355,9 @@ def get_agent(system_extension: str = ""):
                 "Instead of listing every voxel, you must define the scene using high-level shapes (Box, Sphere, Pyramid).\n"
                 "Coordinates are integers. 1 unit = 1 voxel.\n"
                 "The ground is usually at y=0 or y=-1.\n"
-                "IMPORTANT: You must position the scene so its center is at (0, 0, 0). The camera is pointed at the origin. Ensure the main elements are centered.\n"
+                "IMPORTANT: You must position the scene so its center is at (0, 0, 0). The camera is pointed at the origin. Ensure the main elements are centered around (0,0,0).\n"
                 "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
-                "IMPORTANT: Use materials intelligently and creatively. Do NOT randomly assign variants. For example, use 'concrete' for sidewalks, 'asphalt' for roads, 'glass' for windows, 'brick' for walls. Use 'neon_blue' and 'neon_pink' for accents or cyberpunk themes. Create visual interest.\n"
+                "IMPORTANT: Use materials intelligently and creatively. Do NOT randomly assign variants. Create visual interest.\n"
                 "For complex scenes like 'city', generate multiple boxes for buildings, roads as flat boxes, etc.\n"
                 "For 'landscape', use large boxes or spheres to approximate terrain.\n"
                 "Be generous with scale. A building might be 10x20x10.\n" +
@@ -377,7 +371,8 @@ def get_agent(system_extension: str = ""):
                 "5. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
                 "6. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
                 "7. Supported Voxel Types: " + ", ".join(PALETTE) + ".\n"
-                "8. Return the full scene data including your changes, or at least the chunks you modified."
+                "8. PARTIAL UPDATES: The system supports partial updates. You can return only the shapes/chunks that have changed. The client will merge them with the existing scene. This is cleaner and faster.\n"
+                "9. TO CLEAR VOXELS: Use the 'air' material. Overwrite existing voxels with 'air' shapes to remove them."
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -416,8 +411,6 @@ async def stream_handler(body: dict):
             messages = body.get("messages", [])
 
         # Construct the conversation history / prompt
-        # We want to include the System Context (Readable) if present
-
         full_context = "User Context:\n"
         user_prompt = ""
 
@@ -433,17 +426,11 @@ async def stream_handler(body: dict):
             if role == "system":
                 full_context += f"[System Context]: {content}\n"
             elif role == "user":
-                # Keep the last user prompt as the main prompt, but append previous?
-                # For simplicity, let's concatenate everything relevant
-                user_prompt = content # Assume last user message is the prompt
-                # If there's history, we might want to append it too, but let's focus on current state + prompt
+                user_prompt = content
 
             # Check for screenshot in content (if text)
             if "image" in content or "base64" in content:
                  full_context += "[Screenshot provided]\n"
-
-        # Fallback: If we can't find explicit system messages, we rely on the user prompt
-        # containing the context if CopilotKit injected it there.
 
         final_prompt = f"{full_context}\n\nUser Request: {user_prompt}"
 
@@ -518,14 +505,6 @@ async def stream_handler(body: dict):
 async def run_agent_custom(request: Request):
     """
     Main endpoint for CopilotKit interaction.
-
-    Handles agent discovery and chat generation requests.
-
-    Args:
-        request: The FastAPI request object.
-
-    Returns:
-        JSONResponse or StreamingResponse: The agent response or discovery data.
     """
     try:
         body = await request.json()
