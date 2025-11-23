@@ -38,6 +38,18 @@ def verify_ui():
             page.wait_for_selector("text=Voxelito", timeout=5000)
 
             # Take a screenshot of the entire UI with the open chat
+
+            # Adjust camera to see the full scene
+            page.evaluate("""
+                if (window.voxelWorld) {
+                    window.voxelWorld.camera.position.set(0, 60, 60);
+                    window.voxelWorld.controls.target.set(0, 0, 0);
+                    window.voxelWorld.controls.update();
+                    window.voxelWorld.requestRender();
+                }
+            """)
+            page.wait_for_timeout(1000)
+
             page.screenshot(path="verification_voxelito.png")
             print("Screenshot captured: verification_voxelito.png")
 

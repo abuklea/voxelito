@@ -48,6 +48,26 @@ test.describe('Large Scene Generation', () => {
     // Wait for rendering (give it some time to process the RLE and mesh)
     await page.waitForTimeout(10000);
 
+    // Zoom out to see the full model
+    console.log('Zooming out...');
+    await page.evaluate(() => {
+        // @ts-ignore
+        if (window.voxelWorld) {
+            // @ts-ignore
+            // Set camera position further back and up for large scenes
+            window.voxelWorld.camera.position.set(0, 120, 120);
+            // @ts-ignore
+            window.voxelWorld.controls.target.set(0, 0, 0); // Look at origin
+            // @ts-ignore
+            window.voxelWorld.controls.update();
+            // @ts-ignore
+            window.voxelWorld.requestRender();
+        }
+    });
+
+    // Wait for camera move to settle
+    await page.waitForTimeout(2000);
+
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'large_city_3_rendered.png') });
 
     // Enable auto-rotate for multiple angles
