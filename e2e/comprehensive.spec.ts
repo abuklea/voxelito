@@ -147,4 +147,105 @@ test.describe('Voxelito E2E Tests', () => {
         await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_3_scene.png`) });
     });
   }
+
+  test('complex scene modification (castle -> lava moat)', async ({ page }) => {
+    const name = 'complex_castle_mod';
+    console.log(`Starting test case: ${name}`);
+
+    await page.goto('http://localhost:5173');
+
+    // Open Chat
+    const chatButton = page.locator('.copilotKitButton');
+    await chatButton.click();
+    const chatInput = page.locator('textarea[placeholder="Type a message..."]');
+    await chatInput.waitFor({ state: 'visible', timeout: 10000 });
+
+    // 1. Generate Castle
+    await chatInput.fill("Create a medieval castle with a moat. Make it large.");
+    await chatInput.press('Enter');
+
+    // Wait for generation
+    console.log('Waiting for castle generation...');
+    try {
+        await page.waitForFunction(() => {
+             // @ts-ignore
+             if (window.voxelWorld && window.voxelWorld.scene) {
+                // @ts-ignore
+                return window.voxelWorld.scene.children.some(c => c.type === 'InstancedMesh' || c.isInstancedMesh);
+             }
+             return false;
+        }, { timeout: 120000 }); // Longer timeout for complex scene
+        console.log('Castle voxels detected.');
+    } catch (e) {
+        console.log('Timed out waiting for castle.');
+    }
+
+    await page.waitForTimeout(5000);
+
+    // Position camera to ensure we see it
+    await page.evaluate(() => {
+        // @ts-ignore
+        if (window.voxelWorld) {
+            // @ts-ignore
+            window.voxelWorld.camera.position.set(0, 60, 60);
+            // @ts-ignore
+            window.voxelWorld.controls.target.set(0, 0, 0);
+            // @ts-ignore
+            window.voxelWorld.controls.update();
+            // @ts-ignore
+            window.voxelWorld.requestRender();
+        }
+    });
+    await page.waitForTimeout(1000);
+
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_1_castle.png`) });
+
+    // 2. Select Voxels (Simulate Click)
+    console.log('Selecting voxels...');
+    const canvas = page.locator('canvas');
+    const canvasBox = await canvas.boundingBox();
+    if (canvasBox) {
+        // Click slightly off-center to hit the walls/moat? Or center?
+        // Castle is at 0,0,0. Camera at 0,60,60 looking at 0,0,0.
+        // Center of screen should hit 0,0,0.
+        await page.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+        await page.waitForTimeout(1000);
+
+        // Verify selection
+        const selectionCount = await page.evaluate(() => {
+             // @ts-ignore
+             const store = window.voxelStore ? window.voxelStore.getState() : null;
+             return store ? Object.keys(store.selectedVoxels).length : 0;
+        });
+        console.log(`Selected ${selectionCount} voxels.`);
+
+        // If selection failed (clicked empty air?), try clicking elsewhere or assume generated scene covers center.
+    }
+
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_2_selection.png`) });
+
+    // 3. Modify Selection
+    await chatInput.fill("Change the selected area to lava.");
+    await chatInput.press('Enter');
+
+    // Wait for response
+    console.log('Waiting for modification response...');
+    try {
+        // Wait for a new message from assistant
+        // We can't easily distinguish new vs old unless we count them.
+        // But the last one should eventually be the response.
+        // We can check for text "I have generated" or similar?
+        // Or just wait for voxel update?
+
+        // Let's wait for the scene to change? Hard to detect change.
+        // Let's wait for the message bubble to appear/update.
+        await page.waitForTimeout(10000);
+
+        // Also poll for voxels again just in case
+    } catch (e) {
+        console.log('Wait for modification might have timed out.');
+    }
+
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}_3_lava.png`) });
+  });
 });
