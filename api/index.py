@@ -6,7 +6,6 @@ import math
 from typing import List, Literal, Optional, Union, Dict
 from dotenv import load_dotenv
 import nest_asyncio
-from fastapi.concurrency import run_in_threadpool
 
 nest_asyncio.apply()
 
@@ -50,15 +49,54 @@ class Pyramid(BaseModel):
     height: int
     material: str
 
+class Cylinder(BaseModel):
+    type: Literal['cylinder'] = 'cylinder'
+    start: List[int] = Field(description="[x, y, z] center of the base")
+    height: int
+    radius: float
+    material: str
+    axis: Literal['x', 'y', 'z'] = 'y'
+
+class Line(BaseModel):
+    type: Literal['line'] = 'line'
+    start: List[int] = Field(description="[x, y, z] start point")
+    end: List[int] = Field(description="[x, y, z] end point")
+    width: int = Field(default=1, description="Thickness of the line")
+    material: str
+
+class Wedge(BaseModel):
+    type: Literal['wedge'] = 'wedge'
+    start: List[int] = Field(description="[x, y, z] corner of the bounding box")
+    size: List[int] = Field(description="[width, height, depth]")
+    orientation: Literal['xn', 'xp', 'zn', 'zp'] = Field(description="Direction the ramp ascends towards")
+    material: str
+
+class Tree(BaseModel):
+    type: Literal['tree'] = 'tree'
+    base: List[int] = Field(description="[x, y, z] base of the trunk")
+    height: int = Field(description="Total height")
+    kind: Literal['oak', 'pine'] = 'oak'
+    material_trunk: str = 'wood'
+    material_leaves: str = 'leaves'
+
+class House(BaseModel):
+    type: Literal['house'] = 'house'
+    base_center: List[int] = Field(description="[x, y, z] center of the floor")
+    width: int
+    depth: int
+    height: int = Field(description="Wall height")
+    roof_height: int
+    material_wall: str = 'brick'
+    material_roof: str = 'roof'
+
 class SceneDescription(BaseModel):
-    shapes: List[Union[Box, Sphere, Pyramid]] = Field(description="List of shapes composing the scene")
+    shapes: List[Union[Box, Sphere, Pyramid, Cylinder, Line, Wedge, Tree, House]] = Field(description="List of shapes composing the scene")
 
 class AgentResponse(BaseModel):
-    commentary: str = Field(description="Conversational response to the user, explaining what you are doing, asking for clarification, or providing progress updates.")
-    scene: Optional[SceneDescription] = Field(description="The 3D scene generation data, if a scene is being generated or modified.")
+    commentary: str = Field(description="Conversational response to the user.")
+    scene: Optional[SceneDescription] = Field(description="The 3D scene generation data.")
 
 # --- API Models ---
-# We don't use these for LLM generation anymore, but for API response structure
 class ChunkResponse(BaseModel):
     position: List[int]
     rle_data: str
@@ -74,26 +112,26 @@ PALETTE = [
 PALETTE_MAP = {name: i for i, name in enumerate(PALETTE)}
 PALETTE_DESCRIPTIONS = {
     "air": "Empty space (use to clear areas)",
-    "grass": "Green grassy terrain, good for ground",
+    "grass": "Green grassy terrain",
     "stone": "Gray natural stone",
     "dirt": "Brown soil",
-    "water": "Blue water liquid",
+    "water": "Blue water",
     "wood": "Brown wood log",
-    "leaves": "Green leaves for trees",
+    "leaves": "Green leaves",
     "sand": "Yellow sand",
     "brick": "Red brick wall",
-    "roof": "Dark brown roofing for houses",
+    "roof": "Dark brown roofing",
     "glass": "Transparent glass",
-    "plank": "Light wood planks for floors/buildings",
+    "plank": "Light wood planks",
     "concrete": "Gray concrete",
-    "asphalt": "Dark gray asphalt for roads",
-    "road_white": "Asphalt with white line for road markings",
-    "road_yellow": "Asphalt with yellow line for road markings",
-    "neon_blue": "Glowing cyan/blue light",
-    "neon_pink": "Glowing pink light",
-    "metal": "Shiny metal surface",
+    "asphalt": "Dark gray asphalt",
+    "road_white": "Asphalt + white line",
+    "road_yellow": "Asphalt + yellow line",
+    "neon_blue": "Glowing blue",
+    "neon_pink": "Glowing pink",
+    "metal": "Shiny metal",
     "snow": "White snow",
-    "lava": "Glowing orange lava"
+    "lava": "Glowing lava"
 }
 MIN_COORD = -512
 MAX_COORD = 512
@@ -102,34 +140,26 @@ MAX_COORD = 512
 
 class VoxelGrid:
     def __init__(self):
-        # Map (cx, cy, cz) -> flat_array (size 32*32*32)
-        # We use a dict of lists for sparse chunk storage
         self.chunks: Dict[tuple, List[int]] = {}
 
     def get_chunk(self, cx, cy, cz):
         key = (cx, cy, cz)
         if key not in self.chunks:
-            # Initialize with 0 (air)
-            self.chunks[key] = [0] * (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE)
+            self.chunks[key] = [0] * (CHUNK_SIZE ** 3)
         return self.chunks[key]
 
     def fill_chunk(self, cx, cy, cz, material_idx):
-        # Set entire chunk to material
         self.chunks[(cx, cy, cz)] = [material_idx] * (CHUNK_SIZE ** 3)
 
     def set_voxel(self, x, y, z, material_idx):
-        # Bounds check
         if not (MIN_COORD <= x < MAX_COORD and MIN_COORD <= y < MAX_COORD and MIN_COORD <= z < MAX_COORD):
             return
-
         cx, rx = divmod(x, CHUNK_SIZE)
         cy, ry = divmod(y, CHUNK_SIZE)
         cz, rz = divmod(z, CHUNK_SIZE)
-
         chunk = self.get_chunk(cx, cy, cz)
         index = rx + ry * CHUNK_SIZE + rz * CHUNK_SIZE * CHUNK_SIZE
-        if 0 <= index < len(chunk):
-            chunk[index] = material_idx
+        chunk[index] = material_idx
 
 def clamp(val):
     return max(MIN_COORD, min(val, MAX_COORD))
@@ -138,184 +168,259 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
     logger.info(f"Rasterizing {len(scene_desc.shapes)} shapes")
     grid = VoxelGrid()
 
-    for i, shape in enumerate(scene_desc.shapes):
-        logger.info(f"Processing shape {i}: {shape}")
-        mat_idx = PALETTE_MAP.get(shape.material, 1)
+    for shape in scene_desc.shapes:
+        try:
+            mat_name = getattr(shape, 'material', 'stone')
+            mat_idx = PALETTE_MAP.get(mat_name, 1)
 
-        if isinstance(shape, Box):
-            logger.info(f"Box raw: {shape.start} {shape.size}")
-            sx = clamp(shape.start[0])
-            sy = clamp(shape.start[1])
-            sz = clamp(shape.start[2])
+            if isinstance(shape, Box):
+                sx, sy, sz = shape.start
+                w, h, d = shape.size
+                ex, ey, ez = sx + w, sy + h, sz + d
 
-            ex = clamp(shape.start[0] + shape.size[0])
-            ey = clamp(shape.start[1] + shape.size[1])
-            ez = clamp(shape.start[2] + shape.size[2])
+                # Optimized box filling
+                min_cx, min_rx = divmod(sx, CHUNK_SIZE)
+                min_cy, min_ry = divmod(sy, CHUNK_SIZE)
+                min_cz, min_rz = divmod(sz, CHUNK_SIZE)
+                max_cx = (ex - 1) // CHUNK_SIZE
+                max_cy = (ey - 1) // CHUNK_SIZE
+                max_cz = (ez - 1) // CHUNK_SIZE
 
-            logger.info(f"Clamped bounds: {sx}-{ex}, {sy}-{ey}, {sz}-{ez}")
+                for cx in range(min_cx, max_cx + 1):
+                    for cy in range(min_cy, max_cy + 1):
+                        for cz in range(min_cz, max_cz + 1):
+                            csx, csy, csz = cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE
+                            cex, cey, cez = csx + CHUNK_SIZE, csy + CHUNK_SIZE, csz + CHUNK_SIZE
 
-            # Width/Height/Depth might be 0 if clamped out
-            if sx >= ex or sy >= ey or sz >= ez: continue
+                            isx, isy, isz = max(sx, csx), max(sy, csy), max(sz, csz)
+                            iex, iey, iez = min(ex, cex), min(ey, cey), min(ez, cez)
 
-            w, h, d = ex - sx, ey - sy, ez - sz
+                            if isx >= iex or isy >= iey or isz >= iez: continue
 
-            # Chunk ranges
-            min_cx, min_rx = divmod(sx, CHUNK_SIZE)
-            min_cy, min_ry = divmod(sy, CHUNK_SIZE)
-            min_cz, min_rz = divmod(sz, CHUNK_SIZE)
+                            if isx == csx and iex == cex and isy == csy and iey == cey and isz == csz and iez == cez:
+                                grid.fill_chunk(cx, cy, cz, mat_idx)
+                            else:
+                                chunk = grid.get_chunk(cx, cy, cz)
+                                for z in range(isz - csz, iez - csz):
+                                    z_offset = z * CHUNK_SIZE * CHUNK_SIZE
+                                    for y in range(isy - csy, iey - csy):
+                                        y_offset = y * CHUNK_SIZE
+                                        base = z_offset + y_offset
+                                        for x in range(isx - csx, iex - csx):
+                                            chunk[base + x] = mat_idx
 
-            # Calculate max chunks (inclusive for loop)
-            max_cx = (ex - 1) // CHUNK_SIZE
-            max_cy = (ey - 1) // CHUNK_SIZE
-            max_cz = (ez - 1) // CHUNK_SIZE
+            elif isinstance(shape, Sphere):
+                cx, cy, cz = shape.center
+                r = shape.radius
+                r_sq = r * r
+                min_x, max_x = int(cx - r), int(cx + r) + 1
+                min_y, max_y = int(cy - r), int(cy + r) + 1
+                min_z, max_z = int(cz - r), int(cz + r) + 1
 
-            logger.info(f"Chunk loop: X {min_cx}-{max_cx}")
+                for x in range(min_x, max_x):
+                    for y in range(min_y, max_y):
+                        for z in range(min_z, max_z):
+                            if (x - cx)**2 + (y - cy)**2 + (z - cz)**2 <= r_sq:
+                                grid.set_voxel(x, y, z, mat_idx)
 
-            for cx in range(min_cx, max_cx + 1):
-                for cy in range(min_cy, max_cy + 1):
-                    for cz in range(min_cz, max_cz + 1):
-                        # Chunk bounds
-                        csx = cx * CHUNK_SIZE
-                        csy = cy * CHUNK_SIZE
-                        csz = cz * CHUNK_SIZE
-                        cex = csx + CHUNK_SIZE
-                        cey = csy + CHUNK_SIZE
-                        cez = csz + CHUNK_SIZE
+            elif isinstance(shape, Pyramid):
+                cx, cy, cz = shape.base_center
+                h = shape.height
+                for y_off in range(h):
+                    y = cy + y_off
+                    half = h - y_off - 1
+                    for x in range(cx - half, cx + half + 1):
+                        for z in range(cz - half, cz + half + 1):
+                            grid.set_voxel(x, y, z, mat_idx)
 
-                        isx = max(sx, csx)
-                        isy = max(sy, csy)
-                        isz = max(sz, csz)
-                        iex = min(ex, cex)
-                        iey = min(ey, cey)
-                        iez = min(ez, cez)
+            elif isinstance(shape, Cylinder):
+                sx, sy, sz = shape.start
+                h = shape.height
+                r = shape.radius
+                r_sq = r * r
+                axis = shape.axis
 
-                        if isx >= iex or isy >= iey or isz >= iez:
-                            continue
+                if axis == 'y':
+                    for y in range(sy, sy + h):
+                        for x in range(int(sx - r), int(sx + r) + 1):
+                            for z in range(int(sz - r), int(sz + r) + 1):
+                                if (x - sx)**2 + (z - sz)**2 <= r_sq:
+                                    grid.set_voxel(x, y, z, mat_idx)
+                elif axis == 'x':
+                    for x in range(sx, sx + h):
+                        for y in range(int(sy - r), int(sy + r) + 1):
+                            for z in range(int(sz - r), int(sz + r) + 1):
+                                if (y - sy)**2 + (z - sz)**2 <= r_sq:
+                                    grid.set_voxel(x, y, z, mat_idx)
+                elif axis == 'z':
+                    for z in range(sz, sz + h):
+                        for x in range(int(sx - r), int(sx + r) + 1):
+                            for y in range(int(sy - r), int(sy + r) + 1):
+                                if (x - sx)**2 + (y - sy)**2 <= r_sq:
+                                    grid.set_voxel(x, y, z, mat_idx)
 
-                        # Check if fully contained
-                        if isx == csx and iex == cex and \
-                           isy == csy and iey == cey and \
-                           isz == csz and iez == cez:
-                            grid.fill_chunk(cx, cy, cz, mat_idx)
-                        else:
-                            # Iterate intersection
-                            chunk = grid.get_chunk(cx, cy, cz)
-                            # Optimization: Local coordinates
-                            lx_start = isx - csx
-                            lx_end = iex - csx
-                            ly_start = isy - csy
-                            ly_end = iey - csy
-                            lz_start = isz - csz
-                            lz_end = iez - csz
+            elif isinstance(shape, Line):
+                x1, y1, z1 = shape.start
+                x2, y2, z2 = shape.end
+                w = shape.width
 
-                            # Loop
-                            for z in range(lz_start, lz_end):
-                                z_offset = z * CHUNK_SIZE * CHUNK_SIZE
-                                for y in range(ly_start, ly_end):
-                                    y_offset = y * CHUNK_SIZE
-                                    base = z_offset + y_offset
-                                    for x in range(lx_start, lx_end):
-                                        chunk[base + x] = mat_idx
+                points = []
+                dx, dy, dz = x2 - x1, y2 - y1, z2 - z1
+                steps = max(abs(dx), abs(dy), abs(dz))
+                if steps == 0:
+                    grid.set_voxel(x1, y1, z1, mat_idx)
+                else:
+                    for i in range(steps + 1):
+                        t = i / steps
+                        x = int(x1 + dx * t)
+                        y = int(y1 + dy * t)
+                        z = int(z1 + dz * t)
 
-        elif isinstance(shape, Sphere):
-            cx, cy, cz = shape.center
-            r = shape.radius
-            r_sq = r * r
+                        half = w // 2
+                        for wx in range(x - half, x - half + w):
+                            for wy in range(y - half, y - half + w):
+                                for wz in range(z - half, z - half + w):
+                                    grid.set_voxel(wx, wy, wz, mat_idx)
 
-            min_x = clamp(int(cx - r))
-            max_x = clamp(int(cx + r))
-            min_y = clamp(int(cy - r))
-            max_y = clamp(int(cy + r))
-            min_z = clamp(int(cz - r))
-            max_z = clamp(int(cz + r))
+            elif isinstance(shape, Wedge):
+                sx, sy, sz = shape.start
+                w, h, d = shape.size
+                orient = shape.orientation
 
-            if min_x >= max_x or min_y >= max_y or min_z >= max_z: continue
+                for x in range(sx, sx + w):
+                    for y in range(sy, sy + h):
+                        for z in range(sz, sz + d):
+                            lx, ly, lz = x - sx, y - sy, z - sz
+                            threshold = 0
+                            if orient == 'xp': # Ascend +X
+                                threshold = (lx / w) * h
+                            elif orient == 'xn': # Ascend -X
+                                threshold = ((w - 1 - lx) / w) * h
+                            elif orient == 'zp': # Ascend +Z
+                                threshold = (lz / d) * h
+                            elif orient == 'zn': # Ascend -Z
+                                threshold = ((d - 1 - lz) / d) * h
 
-            min_cx = min_x // CHUNK_SIZE
-            max_cx = max_x // CHUNK_SIZE
-            min_cy = min_y // CHUNK_SIZE
-            max_cy = max_y // CHUNK_SIZE
-            min_cz = min_z // CHUNK_SIZE
-            max_cz = max_z // CHUNK_SIZE
+                            if ly <= threshold:
+                                grid.set_voxel(x, y, z, mat_idx)
 
-            for chx in range(min_cx, max_cx + 1):
-                 for chy in range(min_cy, max_cy + 1):
-                     for chz in range(min_cz, max_cz + 1):
-                         # Chunk bounds
-                         c_min_x = chx * CHUNK_SIZE
-                         c_max_x = c_min_x + CHUNK_SIZE - 1
-                         c_min_y = chy * CHUNK_SIZE
-                         c_max_y = c_min_y + CHUNK_SIZE - 1
-                         c_min_z = chz * CHUNK_SIZE
-                         c_max_z = c_min_z + CHUNK_SIZE - 1
+            elif isinstance(shape, Tree):
+                bx, by, bz = shape.base
+                h = shape.height
+                kind = shape.kind
+                mat_trunk = PALETTE_MAP.get(shape.material_trunk, PALETTE_MAP['wood'])
+                mat_leaves = PALETTE_MAP.get(shape.material_leaves, PALETTE_MAP['leaves'])
 
-                         # 1. Check if fully outside (AABB vs Sphere)
-                         closest_x = max(c_min_x, min(cx, c_max_x))
-                         closest_y = max(c_min_y, min(cy, c_max_y))
-                         closest_z = max(c_min_z, min(cz, c_max_z))
-                         dist_closest_sq = (closest_x - cx)**2 + (closest_y - cy)**2 + (closest_z - cz)**2
+                # Deterministic variation
+                seed = (bx * 73856093) ^ (by * 19349663) ^ (bz * 83492791)
 
-                         if dist_closest_sq > r_sq:
-                             continue
+                # Varies height by +/- 10%
+                h_var = h + (seed % 3) - 1
+                if h_var < 2: h_var = 2
 
-                         # 2. Check if fully inside (All corners inside)
-                         corners = [
-                             (c_min_x, c_min_y, c_min_z), (c_max_x, c_min_y, c_min_z),
-                             (c_min_x, c_max_y, c_min_z), (c_max_x, c_max_y, c_min_z),
-                             (c_min_x, c_min_y, c_max_z), (c_max_x, c_min_y, c_max_z),
-                             (c_min_x, c_max_y, c_max_z), (c_max_x, c_max_y, c_max_z)
-                         ]
-                         all_inside = True
-                         for (kx, ky, kz) in corners:
-                             if (kx - cx)**2 + (ky - cy)**2 + (kz - cz)**2 > r_sq:
-                                 all_inside = False
-                                 break
+                trunk_h = int(h_var * 0.3)
+                if trunk_h < 1: trunk_h = 1
 
-                         if all_inside:
-                             grid.fill_chunk(chx, chy, chz, mat_idx)
-                             continue
+                for y in range(by, by + trunk_h):
+                    grid.set_voxel(bx, y, bz, mat_trunk)
+                    if h_var > 8 and y < by + 2:
+                        grid.set_voxel(bx+1, y, bz, mat_trunk)
+                        grid.set_voxel(bx-1, y, bz, mat_trunk)
+                        grid.set_voxel(bx, y, bz+1, mat_trunk)
+                        grid.set_voxel(bx, y, bz-1, mat_trunk)
 
-                         # 3. Partial intersection
-                         chunk = grid.get_chunk(chx, chy, chz)
+                canopy_start_y = by + trunk_h - 1
+                canopy_h = h_var - trunk_h + 1
 
-                         # Optimize loop bounds based on intersection
-                         ix_min = max(min_x, c_min_x)
-                         ix_max = min(max_x, c_max_x)
-                         iy_min = max(min_y, c_min_y)
-                         iy_max = min(max_y, c_max_y)
-                         iz_min = max(min_z, c_min_z)
-                         iz_max = min(max_z, c_max_z)
+                if kind == 'pine':
+                    current_y = canopy_start_y
+                    max_r = int(h_var * 0.35)
+                    for r in range(max_r, -1, -1):
+                        step_h = 2 if r > 0 else 1
+                        for y in range(current_y, current_y + step_h):
+                             for x in range(bx - r, bx + r + 1):
+                                 for z in range(bz - r, bz + r + 1):
+                                     if (x - bx)**2 + (z - bz)**2 <= r*r + 1:
+                                         grid.set_voxel(x, y, z, mat_leaves)
+                        current_y += step_h
+                else: # Oak
+                    cy = canopy_start_y + int(canopy_h * 0.5)
+                    cr = int(canopy_h * 0.5) + (seed % 2) # Slight radius variation
+                    r_sq = cr * cr
+                    for x in range(bx - cr, bx + cr + 1):
+                        for y in range(canopy_start_y, canopy_start_y + canopy_h + 1):
+                             for z in range(bz - cr, bz + cr + 1):
+                                 if (x - bx)**2 + (y - cy)**2 + (z - bz)**2 <= r_sq:
+                                     grid.set_voxel(x, y, z, mat_leaves)
 
-                         for z in range(iz_min, iz_max + 1):
-                             lz = z - c_min_z
-                             z_term = (z - cz)**2
-                             for y in range(iy_min, iy_max + 1):
-                                 ly = y - c_min_y
-                                 y_term = (y - cy)**2
-                                 if z_term + y_term > r_sq: continue
+            elif isinstance(shape, House):
+                cx, cy, cz = shape.base_center
+                w, d = shape.width, shape.depth
+                h_wall = shape.height
+                h_roof = shape.roof_height
+                mat_wall = PALETTE_MAP.get(shape.material_wall, PALETTE_MAP['brick'])
+                mat_roof = PALETTE_MAP.get(shape.material_roof, PALETTE_MAP['roof'])
 
-                                 for x in range(ix_min, ix_max + 1):
-                                     if z_term + y_term + (x - cx)**2 <= r_sq:
-                                         lx = x - c_min_x
-                                         idx = lx + ly * CHUNK_SIZE + lz * CHUNK_SIZE * CHUNK_SIZE
-                                         chunk[idx] = mat_idx
+                sx, sy, sz = cx - w//2, cy, cz - d//2
+                ex, ey, ez = sx + w, sy + h_wall, sz + d
 
-        elif isinstance(shape, Pyramid):
-            cx, cy, cz = shape.base_center
-            h = shape.height
-            mat_idx = PALETTE_MAP.get(shape.material, 1)
-            for y_offset in range(h):
-                y = cy + y_offset
-                half_size = h - y_offset - 1
-                if half_size < 0: break
-                for x in range(cx - half_size, cx + half_size + 1):
-                    for z in range(cz - half_size, cz + half_size + 1):
-                        grid.set_voxel(x, y, z, mat_idx)
+                for x in range(sx, ex):
+                    for y in range(sy, ey):
+                        for z in range(sz, ez):
+                            grid.set_voxel(x, y, z, mat_wall)
+
+                # Roof orientation
+                if w > d:
+                    axis = 'x'
+                    long_dim = w
+                    short_dim = d
+                else:
+                    axis = 'z'
+                    long_dim = d
+                    short_dim = w
+
+                if abs(w - d) < 3:
+                     # Pyramid roof for square-ish base
+                     base_y = ey
+                     for y_off in range(h_roof):
+                         y = base_y + y_off
+                         inset = y_off
+                         for x in range(sx + inset, ex - inset):
+                             for z in range(sz + inset, ez - inset):
+                                 grid.set_voxel(x, y, z, mat_roof)
+                else:
+                    # Gable roof
+                    base_y = ey
+                    center_short = sx + w//2 if axis == 'z' else sz + d//2
+
+                    for y_off in range(h_roof):
+                        y = base_y + y_off
+                        progress = y_off / h_roof
+                        current_half_span = (short_dim / 2) * (1 - progress)
+
+                        if axis == 'x': # Ridge along X, slope along Z
+                             cz_local = sz + d//2
+                             z_start = int(cz_local - current_half_span)
+                             z_end = int(cz_local + current_half_span)
+                             for x in range(sx, ex):
+                                 for z in range(z_start, z_end + 1):
+                                     grid.set_voxel(x, y, z, mat_roof)
+                        else: # Ridge along Z, slope along X
+                             cx_local = sx + w//2
+                             x_start = int(cx_local - current_half_span)
+                             x_end = int(cx_local + current_half_span)
+                             for z in range(sz, ez):
+                                 for x in range(x_start, x_end + 1):
+                                     grid.set_voxel(x, y, z, mat_roof)
+
+        except Exception as e:
+            logger.error(f"Error rasterizing shape {shape}: {e}")
 
     # Convert chunks to RLE
     response_chunks = []
     for (cx, cy, cz), voxels in grid.chunks.items():
-        if not voxels: continue
+        # NOTE: We send even empty chunks (all 0) if they were touched,
+        # because the user might be clearing voxels (placing air).
 
         rle_parts = []
         current_val = voxels[0]
@@ -342,42 +447,44 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
 
 # --- Agent Initialization ---
 def get_agent(system_extension: str = ""):
-    """
-    Initializes and returns the Pydantic AI agent.
-    """
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
         return Agent(
             "openai:gpt-4o",
             output_type=AgentResponse,
             system_prompt=(
-                "You are Voxelito, a quirky young Colombian who lives in Australia. You are an expert voxel scene generator.\n"
-                "Personality: Energetic, friendly, helpful, and conversational.\n"
-                "Language: English, but you frequently pepper your speech with Colombian-Spanish slang like 'Parce', 'Bacano', 'Chevere', 'Listo', 'De una'.\n"
-                "Greeting: Always greet with variations of 'Hola!' or 'Que mas?'.\n"
-                "Goal: Help the user create and edit 3D voxel scenes while being fun to talk to.\n"
+                "You are Voxelito, an expert artistic voxel scene generator.\n"
+                "Personality: Creative, detail-oriented, enthusiastic. You love architecture and nature.\n"
+                "Greeting: Hola! Ready to build something spectacular?\n"
                 "\n"
-                "Instead of listing every voxel, you must define the scene using high-level shapes (Box, Sphere, Pyramid).\n"
-                "Coordinates are integers. 1 unit = 1 voxel.\n"
-                "The ground is usually at y=0 or y=-1.\n"
-                "IMPORTANT: You must position the scene so its center is at (0, 0, 0). The camera is pointed at the origin. Ensure the main elements are centered around (0,0,0).\n"
+                "SCENE SCALES:\n"
+                "- Small: 100x100x100 (Coordinates approx -50 to 50). Good for single objects.\n"
+                "- Medium: 300x300x300 (Coordinates approx -150 to 150). DEFAULT. Good for dioramas.\n"
+                "- Large: 500x500x500 (Coordinates approx -250 to 250). Good for cities/landscapes.\n"
+                "\n"
+                "CONSTRUCTION STRATEGY:\n"
+                "To create 'High Quality' and 'Artistic' scenes, you must compose shapes intelligently.\n"
+                "1. **Structure**: Do not rely solely on the 'House' primitive for main buildings. It is a placeholder. For detailed architecture, build custom structures using 'Box' (walls), 'Wedge' (roofs), 'Cylinder' (pillars), and 'Line' (frames).\n"
+                "2. **Detail ('Greebling')**: Use 'Line' with width=1 to add fences, cables, railings, and window frames. Use small 'Box' or 'Wedge' shapes for chimneys, vents, and furniture.\n"
+                "3. **Nature**: Always use 'Tree' for vegetation. Group them to form forests. Use 'Sphere' for bushes or clouds.\n"
+                "4. **Terrain**: Use large 'Box' layers for the ground. Create elevation changes.\n"
+                "\n"
+                "TOOLS:\n"
+                "- Box: Walls, ground, platforms.\n"
+                "- Wedge: Ramps, roofs, stairs. Essential for non-boxy looks.\n"
+                "- Cylinder: Pillars, towers, tree trunks.\n"
+                "- Line: Details, fences, ropes. (Width > 1 for beams).\n"
+                "- Tree: Procedural vegetation (Oak/Pine).\n"
+                "- Sphere: Organic shapes.\n"
+                "- House: Basic background buildings only.\n"
+                "\n"
                 "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
-                "IMPORTANT: Use materials intelligently and creatively. Do NOT randomly assign variants. Create visual interest.\n"
-                "For complex scenes like 'city', generate multiple boxes for buildings, roads as flat boxes, etc.\n"
-                "For 'landscape', use large boxes or spheres to approximate terrain.\n"
-                "Be generous with scale. A building might be 10x20x10.\n" +
-                system_extension +
-                "\nYou will receive context about the current scene state, user selection, and a screenshot.\n"
+                "\n" + system_extension + "\n"
                 "RULES:\n"
-                "1. Output MUST be an AgentResponse object. Always provide 'commentary' to explain your actions, ask for clarification if the request is ambiguous, or provide progress updates.\n"
-                "2. If you are generating or modifying the scene, provide the 'scene' field with the scene description.\n"
-                "3. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
-                "4. If no selection is provided, you may generate or modify the entire scene.\n"
-                "5. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
-                "6. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
-                "7. Supported Voxel Types: " + ", ".join(PALETTE) + ".\n"
-                "8. PARTIAL UPDATES: The system supports partial updates. You can return only the shapes/chunks that have changed. The client will merge them with the existing scene. This is cleaner and faster.\n"
-                "9. TO CLEAR VOXELS: Use the 'air' material. Overwrite existing voxels with 'air' shapes to remove them."
+                "1. Output must be an AgentResponse.\n"
+                "2. Provide 'commentary' explaining your artistic choices.\n"
+                "3. Center the main elements at (0,0,0).\n"
+                "4. If 'selectedVoxels' are present, edit that area.\n"
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -395,18 +502,6 @@ app.add_middleware(
 
 # --- Streaming Logic ---
 async def stream_handler(body: dict):
-    """
-    Handles the streaming response for the CopilotKit agent.
-
-    Processes the request body, extracts messages, runs the agent,
-    rasterizes the result, and streams the GraphQL response via SSE.
-
-    Args:
-        body: The JSON body of the request containing variables and messages.
-
-    Yields:
-        str: Server-Sent Events (SSE) data strings.
-    """
     logger.info("Stream handler started")
     try:
         variables = body.get("variables", {})
@@ -415,7 +510,6 @@ async def stream_handler(body: dict):
         if not messages:
             messages = body.get("messages", [])
 
-        # Construct the conversation history / prompt
         full_context = "User Context:\n"
         user_prompt = ""
 
@@ -427,21 +521,16 @@ async def stream_handler(body: dict):
             else:
                 content = msg.get("content", "")
 
-            # CopilotKit might send readable context as system messages
             if role == "system":
                 full_context += f"[System Context]: {content}\n"
             elif role == "user":
                 user_prompt = content
 
-            # Check for screenshot in content (if text)
             if "image" in content or "base64" in content:
                  full_context += "[Screenshot provided]\n"
 
         final_prompt = f"{full_context}\n\nUser Request: {user_prompt}"
 
-        logger.info(f"Running agent with prompt length: {len(final_prompt)}")
-
-        # Extract system instructions from previous messages
         extra_system_prompt = ""
         for msg in messages:
             if msg.get("role") == "system":
@@ -454,35 +543,22 @@ async def stream_handler(body: dict):
             yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
             return
 
-        # Run the agent
-        logger.info("Running agent...")
         result = await agent.run(final_prompt)
-        logger.info("Agent run complete.")
 
-        # Process result
         if hasattr(result, 'data'):
              agent_response = result.data
         elif hasattr(result, 'output'):
              agent_response = result.output
         else:
-             logger.error(f"Result object keys: {dir(result)}")
              raise ValueError("Cannot find data in agent result")
 
         response_text = agent_response.commentary
 
         if agent_response.scene:
-             logger.info("Rasterizing scene...")
              chunks = rasterize_scene(agent_response.scene)
-
-             # Convert to dict for JSON
              chunks_data = [chunk.model_dump() for chunk in chunks]
-
-             scene_data = {
-                 "chunks": chunks_data
-             }
+             scene_data = { "chunks": chunks_data }
              json_str = json.dumps(scene_data)
-
-             # Append JSON block to commentary
              response_text += f"\n\n```json\n{json_str}\n```"
 
         graphql_response = {
@@ -508,9 +584,6 @@ async def stream_handler(body: dict):
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
-    """
-    Main endpoint for CopilotKit interaction.
-    """
     try:
         body = await request.json()
     except Exception as e:
