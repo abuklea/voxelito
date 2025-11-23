@@ -53,6 +53,10 @@ class Pyramid(BaseModel):
 class SceneDescription(BaseModel):
     shapes: List[Union[Box, Sphere, Pyramid]] = Field(description="List of shapes composing the scene")
 
+class AgentResponse(BaseModel):
+    commentary: str = Field(description="Conversational response to the user, explaining what you are doing, asking for clarification, or providing progress updates.")
+    scene: Optional[SceneDescription] = Field(description="The 3D scene generation data, if a scene is being generated or modified.")
+
 # --- API Models ---
 # We don't use these for LLM generation anymore, but for API response structure
 class ChunkResponse(BaseModel):
@@ -351,7 +355,7 @@ def get_agent(system_extension: str = ""):
     if api_key:
         return Agent(
             "openai:gpt-4o",
-            output_type=SceneDescription,
+            output_type=AgentResponse,
             system_prompt=(
                 "You are an expert voxel scene generator. Generate complex and visually impressive 3D scenes based on the user's prompt.\n"
                 "Instead of listing every voxel, you must define the scene using high-level shapes (Box, Sphere, Pyramid).\n"
@@ -366,12 +370,14 @@ def get_agent(system_extension: str = ""):
                 system_extension +
                 "\nYou will receive context about the current scene state, user selection, and a screenshot.\n"
                 "RULES:\n"
-                "1. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
-                "2. If no selection is provided, you may generate or modify the entire scene.\n"
-                "3. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
-                "4. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
-                "5. Supported Voxel Types: " + ", ".join(PALETTE) + ".\n"
-                "6. Return the full scene data including your changes, or at least the chunks you modified."
+                "1. Output MUST be an AgentResponse object. Always provide 'commentary' to explain your actions, ask for clarification if the request is ambiguous, or provide progress updates.\n"
+                "2. If you are generating or modifying the scene, provide the 'scene' field with the scene description.\n"
+                "3. If 'selectedVoxels' are provided, you must ONLY modify or generate voxels within or immediately adjacent to that selection. Treat the selection as the active workspace.\n"
+                "4. If no selection is provided, you may generate or modify the entire scene.\n"
+                "5. Maintain visual consistency. Ensure boundaries between new and existing voxels are seamless.\n"
+                "6. The scene is represented as a list of chunks. Each chunk has a position [x,y,z] and a list of voxels.\n"
+                "7. Supported Voxel Types: " + ", ".join(PALETTE) + ".\n"
+                "8. Return the full scene data including your changes, or at least the chunks you modified."
             )
         )
     logger.error("OPENAI_API_KEY not found.")
@@ -459,29 +465,33 @@ async def stream_handler(body: dict):
         # Run the agent
         logger.info("Running agent...")
         result = await agent.run(final_prompt)
-        logger.info("Agent run complete. Rasterizing...")
+        logger.info("Agent run complete.")
 
-        # Rasterize
+        # Process result
         if hasattr(result, 'data'):
-             scene_description = result.data
-        elif hasattr(result, 'output'): # Fallback/Previous
-             scene_description = result.output
+             agent_response = result.data
+        elif hasattr(result, 'output'):
+             agent_response = result.output
         else:
              logger.error(f"Result object keys: {dir(result)}")
              raise ValueError("Cannot find data in agent result")
 
-        chunks = rasterize_scene(scene_description)
+        response_text = agent_response.commentary
 
-        # Convert to dict for JSON
-        chunks_data = [chunk.model_dump() for chunk in chunks]
+        if agent_response.scene:
+             logger.info("Rasterizing scene...")
+             chunks = rasterize_scene(agent_response.scene)
 
-        scene_data = {
-            "chunks": chunks_data
-        }
-        json_str = json.dumps(scene_data)
+             # Convert to dict for JSON
+             chunks_data = [chunk.model_dump() for chunk in chunks]
 
-        # Wrap in Markdown block so frontend can parse it, and add a friendly message.
-        response_text = f"I've generated the scene based on your request.\n\n```json\n{json_str}\n```"
+             scene_data = {
+                 "chunks": chunks_data
+             }
+             json_str = json.dumps(scene_data)
+
+             # Append JSON block to commentary
+             response_text += f"\n\n```json\n{json_str}\n```"
 
         graphql_response = {
             "data": {

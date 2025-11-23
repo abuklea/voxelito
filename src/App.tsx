@@ -78,6 +78,7 @@ function VoxelApp() {
     if (voxelWorld) {
       (window as any).voxelWorld = voxelWorld;
     }
+    (window as any).voxelStore = useVoxelStore;
   }, [voxelWorld]);
 
   // --- Context for the Agent ---
