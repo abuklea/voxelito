@@ -146,6 +146,15 @@ This document breaks down the technical specifications into a detailed, step-by-
     -   **Files**: Various.
     -   **Step Dependencies**: All previous steps.
 
+-   **Step 15b: Hierarchical Hybrid Pipeline & Path Tracing**
+    -   **Assignee**: `backend-engineer`, `3d-specialist`
+    -   **Task**: Implement the 3-Stage Generation Pipeline (WFC -> Asset Gen -> Super-Res) for large-scale scenes and integrate Voxel Path Tracing (or high-fidelity equivalent) for rendering.
+    -   **Files**:
+        -   `PRPs/P4S15b-Hierarchical-Hybrid-Pipeline.md`: The detailed PRP.
+        -   `api/pipeline/`: Backend pipeline modules.
+        -   `src/features/voxel-engine/`: Frontend rendering updates.
+    -   **Step Dependencies**: Step 15.
+
 -   **Step 16: Deployment**
     -   **Assignee**: `devops-engineer`
     -   **Task**: Configure the project for production deployment on Vercel. Set up production environment variables and ensure the CI/CD pipeline runs correctly.
