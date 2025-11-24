@@ -11,6 +11,8 @@ import { Toolbar } from './components/Toolbar';
 import type { SceneData } from './types';
 import ErrorBoundary from './ErrorBoundary';
 import { NeonLogo } from './components/NeonLogo';
+import { OfflineIndicator, Toast } from './components/Notifications';
+import { useNotificationStore } from './store/notificationStore';
 import "@copilotkit/react-ui/styles.css";
 
 const SIZES = {
@@ -111,6 +113,7 @@ function VoxelApp() {
   const { visibleMessages, isLoading } = useCopilotChat();
   const voxelStore = useVoxelStore();
   const currentSelection = voxelStore?.selectedVoxels || {};
+  const { message, type, showToast, hideToast } = useNotificationStore();
 
   useEffect(() => {
     if (voxelWorld) {
@@ -159,7 +162,11 @@ function VoxelApp() {
           }
 
           const parsed = JSON.parse(content);
-          if (parsed && Array.isArray(parsed.chunks)) {
+
+          if (parsed.error) {
+             console.error("Agent returned error:", parsed.error);
+             showToast(parsed.error.message || "An unknown error occurred.", 'error');
+          } else if (parsed && Array.isArray(parsed.chunks)) {
             console.log("Valid scene data received, updating viewer...");
             setSceneData(prev => mergeSceneData(prev, parsed as SceneData));
           }
@@ -168,10 +175,12 @@ function VoxelApp() {
         }
       }
     }
-  }, [isLoading, visibleMessages]);
+  }, [isLoading, visibleMessages, showToast]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-primary)' }}>
+      <OfflineIndicator />
+      <Toast message={message} type={type} onClose={hideToast} />
       <Header size={size} setSize={setSize} isLoading={isLoading} />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Viewer ref={ref} />

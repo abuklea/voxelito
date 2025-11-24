@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as THREE from 'three';
 import { useVoxelStore } from '../store/voxelStore';
 import type { SelectionTool, SelectionMode } from '../store/voxelStore';
 import type { VoxelWorld } from '../lib/VoxelWorld';
@@ -40,12 +41,31 @@ export const Toolbar: React.FC<ToolbarProps> = ({ voxelWorld }) => {
 
   const handleResetView = () => {
     if (voxelWorld) {
-        // Isometric-ish view
-        voxelWorld.camera.position.set(50, 50, 50);
-        // Look at origin
-        voxelWorld.controls.target.set(0, 0, 0);
-        voxelWorld.controls.update();
-        voxelWorld.requestRender();
+        // Smooth transition
+        const startPos = voxelWorld.camera.position.clone();
+        const targetPos = new THREE.Vector3(50, 50, 50);
+        const startTarget = voxelWorld.controls.target.clone();
+        const endTarget = new THREE.Vector3(0, 0, 0);
+
+        const duration = 1000;
+        const startTime = performance.now();
+
+        const animate = (time: number) => {
+            const elapsed = time - startTime;
+            const t = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const ease = 1 - Math.pow(1 - t, 3);
+
+            voxelWorld.camera.position.lerpVectors(startPos, targetPos, ease);
+            voxelWorld.controls.target.lerpVectors(startTarget, endTarget, ease);
+            voxelWorld.controls.update();
+            voxelWorld.requestRender();
+
+            if (t < 1) {
+                requestAnimationFrame(animate);
+            }
+        };
+        requestAnimationFrame(animate);
     }
   };
 
@@ -66,7 +86,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ voxelWorld }) => {
   };
 
   return (
-    <div style={{
+    <div
+      className="toolbar-container"
+      style={{
       position: 'absolute',
       top: '20px',
       left: '20px',

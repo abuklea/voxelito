@@ -13,6 +13,24 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
     const { chunkData, dimensions } = event.data;
     const [width, height, depth] = dimensions;
 
+    // Optimization: Check if chunk is empty
+    let isEmpty = true;
+    for (let i = 0; i < chunkData.length; i++) {
+        if (chunkData[i] !== 0) {
+            isEmpty = false;
+            break;
+        }
+    }
+    if (isEmpty) {
+        self.postMessage({
+            vertices: new Float32Array(0),
+            indices: new Uint32Array(0),
+            voxelIds: new Uint8Array(0),
+            chunkId: event.data.chunkId,
+        });
+        return;
+    }
+
     const vertices: number[] = [];
     const indices: number[] = [];
     const voxelIds: number[] = [];

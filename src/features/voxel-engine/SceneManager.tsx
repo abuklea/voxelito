@@ -76,7 +76,6 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
 
     if (meshes.current[chunkId]) {
       voxelWorld.removeChunkMesh(chunkId, meshes.current[chunkId]);
-      meshes.current[chunkId].geometry.dispose();
     }
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -102,7 +101,6 @@ export const SceneManager: React.FC<SceneManagerProps> = ({ sceneData, voxelWorl
         for (const chunkId in meshes.current) {
           if (!activeChunkIds.has(chunkId)) {
             voxelWorld.removeChunkMesh(chunkId, meshes.current[chunkId]);
-            meshes.current[chunkId].geometry.dispose();
             delete meshes.current[chunkId];
           }
         }

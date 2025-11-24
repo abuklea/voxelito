@@ -141,6 +141,16 @@ export class VoxelWorld {
    */
   public removeChunkMesh(chunkId: string, mesh: THREE.Mesh) {
     this.scene.remove(mesh);
+    if (mesh.geometry) {
+        mesh.geometry.dispose();
+    }
+    if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(m => m.dispose());
+        } else {
+            mesh.material.dispose();
+        }
+    }
     this.requestRender();
   }
 

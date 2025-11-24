@@ -1,99 +1,79 @@
-# Project Memory: Voxel Diorama Generator
+# Project Memory: Voxelito
 
 This document serves as a centralized, living record of the project's state, architecture, key decisions, and implementation learnings. Its purpose is to ensure consistency and adherence to best practices throughout the development lifecycle.
 
 ## 1. Project Overview & Goal
-The project is a web-based platform for generating and editing 3D voxel diorama scenes. The core feature is a conversational AI interface that allows users to create and modify scenes through natural language chat prompts. The platform targets a broad audience, from hobbyists and gamers to professional designers, by making 3D content creation intuitive and accessible.
+**Voxelito** is a web-based platform for generating and editing 3D voxel diorama scenes. The core feature is a conversational AI interface that allows users to create and modify scenes through natural language chat prompts. The platform targets a broad audience, from hobbyists to designers, by making 3D content creation intuitive and accessible.
 
-**Branding Update:** The project is now branded as **VOXELITO**, featuring a dark, retro-futuristic "cyber-voxel" aesthetic. Key visual elements include deep purple/blue backgrounds, neon accents, and a realistic "neon bulb" logo with flicker effects.
+**Branding:** Dark, retro-futuristic "cyber-voxel" aesthetic (Neon/Dark Mode).
+**Current Version:** Alpha Build (Phase 4 Polish).
 
 ## 2. System Architecture
 The application follows a decoupled client-server model:
 
--   **Frontend (Client):** A rich Single Page Application (SPA) responsible for all user-facing elements. This includes the 3D scene rendering, user interaction (camera controls, voxel selection), and the chat UI.
--   **Backend (Server):** A lightweight, stateless API service that acts as a secure proxy to the AI model (LLM). Its sole purpose is to receive prompts from the client, communicate with the LLM, and return the structured scene data.
--   **Deployment:** The entire application is hosted on Vercel, with the frontend as a static site and the backend API deployed as a serverless function.
-
-```mermaid
-graph TD
-    subgraph "User's Browser"
-        A[React SPA with CopilotKit] -- Manages --> B(Three.js Canvas);
-    end
-    subgraph "Cloud (Vercel)"
-        F[Serverless Function - Python/FastAPI/pydanticAI] -- Securely Calls --> G[LLM API];
-    end
-    A -- AG-UI Protocol (HTTPS) --> F;
-    F -- AG-UI Event Stream --> A;
-```
+-   **Frontend (Client):** React 18 SPA with Vite and TypeScript.
+    -   **Rendering:** Three.js (WebGL) with custom Voxel Engine.
+    -   **State Management:** Zustand (`voxelStore`, `notificationStore`) for reactive state.
+    -   **AI Integration:** CopilotKit for chat UI and context management.
+-   **Backend (Server):** Python FastAPI service.
+    -   **Agent:** `pydantic-ai` with OpenAI GPT-4o.
+    -   **Protocol:** Server-Sent Events (SSE) streaming JSON-serialized GraphQL responses.
+-   **Deployment:** Vercel (Frontend + Serverless Function).
 
 ## 3. Technology Stack
 -   **Frontend:**
-    -   **Framework:** React 18 (with Vite and TypeScript)
-    -   **3D Rendering:** `three`
-    -   **Agent Communication:** `@copilotkit/react-core`, `@copilotkit/react-ui`
+    -   React 18, TypeScript, Vite
+    -   Three.js, @react-three/fiber (not used, pure Three.js managed by React wrapper)
+    -   @copilotkit/react-core, @copilotkit/react-ui
+    -   Zustand
 -   **Backend:**
-    -   **Runtime:** Python 3.9+
-    -   **Framework:** `FastAPI`
-    -   **AI Agent:** `pydantic-ai`
--   **Deployment:**
-    -   **Platform:** Vercel
+    -   Python 3.9+
+    -   FastAPI, Uvicorn
+    -   Pydantic AI, OpenAI SDK
+-   **Testing:**
+    -   Playwright (E2E)
+    -   Vitest (Unit - currently minimal)
 
-## 4. Implementation Plan & Progress
-The project follows the detailed plan outlined in `docs/06_PLAN.md`.
+## 4. Implementation Status (Phase 4: Polish)
+The project is in the final polish phase (P4S15).
 
--   **[✓] Phase 1: Project Foundation & Core Setup**
--   **[✓] Phase 2: Voxel Engine and API Development**
--   **[✓] Phase 3: UI and Feature Integration**
-    -   **[✓] Step 11:** Backend LLM Integration
-    -   **[✓] Step 12:** Implement Scene State Update via Chat Response
-    -   **[✓] Step 12b:** UI Overhaul (Voxelito Branding, Neon Logo, Responsiveness)
-    -   **[✓] Step 13b:** Raycasting for Voxel Selection
-    -   **[✓] Step 14:** Selection Highlighting
--   **[ ] Phase 4: Finalization and Deployment**
+-   **[✓] Core Engine:** Voxel rendering, Chunk management, Greedy meshing (Web Worker).
+-   **[✓] AI Generation:** Scene generation from text, Context awareness (selection, screenshot).
+-   **[✓] Tools:** Cursor, Box, Sphere selection tools. Modes: Replace, Add, Subtract.
+-   **[✓] UI:** Toolbar, Responsive Header, CopilotPopup, Toast Notifications.
+-   **[✓] Polish:** Error handling, Loading states, Mobile responsiveness (in progress).
 
-## 5. Development Process & Key Learnings
+## 5. Key Technical Decisions & Learnings
 
-### 5.1. PRP (Project Realization Plan) Process
--   Each implementation step from the plan is documented with a PRP markdown file in the `PRPs/` directory.
--   The naming convention is `P<Phase_Number>S<Step_Number>-<Description>.md`.
+### 5.1. Backend-Frontend Communication
+-   **Stream Handling:** The backend streams data using SSE. To support CopilotKit's expected format without a dedicated adapter, we manually construct GraphQL-like JSON responses.
+-   **Error Handling:** Errors are trapped at multiple levels. Critical errors return structured JSON objects that are displayed as Toast notifications on the frontend. Less critical errors are logged.
+-   **Rate Limiting:** Implemented a simple in-memory rate limiter (IP-based) to prevent abuse.
 
-### 5.2. Backend LLM Integration
--   The Python backend in `api/` uses `pydantic-ai` to interface with LLMs.
--   API keys are managed using a `.env.local` file in the `api/` directory.
+### 5.2. Voxel Engine Optimization
+-   **Meshing:** Greedy meshing is performed in a Web Worker to prevent UI freezing.
+-   **Texture Atlas:** A dynamic texture atlas is generated at runtime to support voxel rendering with a single draw call per chunk material.
+-   **Memory Management:** `VoxelWorld` handles disposal of Three.js resources (geometries, materials) when chunks are removed to prevent memory leaks.
 
-### 5.3. Frontend Verification
--   Frontend changes are verified using Playwright. The project includes a `verify.spec.js` script for end-to-end testing.
--   Playwright is installed as a dev dependency (`@playwright/test`), and browsers must be installed via `npx playwright install`.
+### 5.3. Interaction System
+-   **Selection Logic:** Selection is handled by `InteractionController` using Raycasting.
+-   **Limits:** Selection size is capped at 10,000 voxels to prevent performance degradation during rendering (InstancedMesh) and network transmission.
+-   **Visuals:** `SelectionHighlighter` uses `THREE.InstancedMesh` for efficient rendering of thousands of selection highlights.
 
-### 5.4. Vite Configuration
--   The `vite.config.ts` file is configured to polyfill the `process` variable to prevent `ReferenceError: process is not defined`.
--   For local development, the Vite server is configured to proxy requests from `/api` to the backend server running on `http://localhost:8000`.
+### 5.4. CopilotKit Integration
+-   **Message Parsing:** The frontend monitors the chat stream. When a message contains a valid JSON block with `chunks`, it merges this data into the scene.
+-   **Context:** `useCopilotReadable` provides the agent with current scene data, selection coordinates, and a viewport screenshot.
 
-### 5.5. React & Three.js Integration
--   **Suspense Deadlock:** A React component that triggers Suspense must be wrapped in a `<Suspense>` boundary to avoid silent rendering failures.
--   **Callback Refs for Imperative Libraries:** When integrating imperative libraries like `three.js`, use the `useCallback` (callback ref) pattern. **Crucially, callback refs should not return a value.** A common mistake is to return a cleanup function from the callback. This violates React's expectations and can cause subtle rendering bugs. Cleanup logic should be handled in a separate `useEffect` hook.
+### 5.5. Testing Strategy
+-   **E2E First:** Primary verification is done via Playwright tests in `e2e/`, covering complex scenarios like "Large Scene", "Dialogue", and "Editing".
+-   **Visual Verification:** Tests capture screenshots for manual review.
 
-### 5.6. TypeScript and Vite
--   **Type-Only Imports:** When a file exports only TypeScript `interface`s or `type`s, it must be imported using `import type`.
--   **Web Workers:** TypeScript-based Web Workers must be placed in the `src` directory and instantiated using the `new URL(...)` pattern.
+## 6. Known Limitations
+-   **Performance:** Large scenes (>500x500x500) may still cause frame drops during generation/meshing.
+-   **Mobile:** 3D navigation on mobile is basic (touch supported by OrbitControls but UI can be cramped).
+-   **Persistence:** No backend database; scenes are lost on refresh (unless user saves manually - feature pending).
 
-### 5.7. Voxel Engine
--   The core data structures for the voxel engine are defined in `src/types.ts`.
--   The greedy meshing algorithm is offloaded to a Web Worker to keep the main UI thread responsive.
-
-### 5.8. CopilotKit Integration
--   **Dual-Protocol Backend:** The CopilotKit integration requires a backend that can handle both a standard `JSONResponse` (for the initial `availableAgents` discovery) and a `StreamingResponse` (for chat).
--   **Client-Side Message Parsing (`useCopilotChat`):** Due to backend limitations (the custom Pydantic agent does not support the OpenAI Tool Calling protocol), the frontend cannot use `useCopilotAction`. Instead, it uses a "Message Listener" pattern with the `useCopilotChat` hook. A `useEffect` hook monitors the chat's `isLoading` state. When a message is complete, the frontend attempts to parse the assistant's last message content as JSON and updates the application state if it's valid scene data.
--   **Resolved UI Rendering Failure:** The previous issue where `<CopilotChat>` was failing to render (hidden by overflow/height issues) was resolved by switching to `<CopilotPopup>`. This component floats above the UI and is more robust for this layout. The chat UI has been heavily customized via CSS to match the "Voxelito" dark theme.
-
-### 5.9. Procedural Graphics & Animation
--   **Procedural Neon Logo:** Instead of using static raster images, the project utilizes procedurally generated SVG components for the logo. This allows for:
-    -   Infinite scalability without pixelation.
-    -   Dynamic coloring (tinting) via CSS props or classes.
-    -   Advanced CSS animations (flicker, glitch) that can target specific parts of the SVG (stroke vs fill).
--   **CSS Filters for Glow:** The "neon glow" effect is achieved using multiple SVG `feGaussianBlur` layers combined with `drop-shadow` filters in CSS. This creates a realistic light bleed effect that is performant and controllable.
-
-### 5.10. Interaction & Highlighting
--   **Imperative vs. Reactive Sync:** The `VoxelWorld` class manages the Three.js scene imperatively, while React components (like `InteractionController` and `SelectionHighlighter`) handle logic reactively. To bridge this, `VoxelWorld` must expose methods like `requestRender()` so that external components can trigger a frame update when they modify the scene (e.g., adding a highlight mesh) without waiting for a user interaction event.
--   **Coordinate Mapping:** Mapping mouse clicks to voxel coordinates requires careful handling of intersections. The intersection point on a face can be slightly offset along the normal to differentiate between "inside the voxel" (for selection) and "outside the voxel" (for placing a neighbor).
--   **Type-Only Imports:** A recurring issue with Vite/TypeScript is the need to explicitly use `import type` for files that only export types (like `src/types.ts`). Failing to do so can cause runtime errors if the bundler tries to import non-existent values.
+## 7. Future Enhancements
+-   **Save/Load:** Implement cloud storage for scenes.
+-   **Multiplayer:** Real-time collaboration using WebSockets.
+-   **Export:** Export to OBJ/GLTF.

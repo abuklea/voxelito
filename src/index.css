@@ -141,3 +141,49 @@ button:hover {
 .neon-text-glitch {
   animation: glitch 6s infinite reverse;
 }
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .toolbar-container {
+    top: auto !important;
+    bottom: 80px !important; /* Above bottom controls if any, or Copilot button */
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center;
+    gap: 10px !important;
+    padding: 10px !important;
+    overflow-y: auto;
+    max-height: 40vh;
+  }
+
+  header {
+    padding: 0 10px !important;
+    flex-direction: row !important; /* Keep logo and size on one line if possible */
+  }
+
+  header > div:first-child {
+    gap: 10px !important;
+  }
+
+  header select {
+    font-size: 0.8rem;
+    width: 100px;
+  }
+
+  /* Make buttons smaller on mobile */
+  button {
+    padding: 0.4em 0.8em;
+    font-size: 0.7rem;
+  }
+
+  /* CopilotKit adjustments */
+  .copilotKitPopup {
+    width: 100% !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    height: 50vh !important;
+  }
+}
