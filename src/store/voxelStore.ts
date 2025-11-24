@@ -25,6 +25,8 @@ interface VoxelState {
   selectionTool: SelectionTool;
   /** Brush size for sphere/brush tools. */
   brushSize: number;
+  /** Scene dimensions [x, y, z]. Default 250x250x250. */
+  sceneSize: [number, number, number];
 
   /**
    * Sets the entire selection.
@@ -53,6 +55,9 @@ interface VoxelState {
   /** Sets the brush size. */
   setBrushSize: (size: number) => void;
 
+  /** Sets the scene size. */
+  setSceneSize: (size: [number, number, number]) => void;
+
   /** Clears the selection. */
   clearSelection: () => void;
 }
@@ -66,6 +71,7 @@ export const useVoxelStore = create<VoxelState>((set) => ({
   selectionMode: 'replace',
   selectionTool: 'cursor',
   brushSize: 1,
+  sceneSize: [250, 250, 250],
 
   setSelectedVoxels: (selection) => set({ selectedVoxels: selection }),
 
@@ -83,5 +89,6 @@ export const useVoxelStore = create<VoxelState>((set) => ({
   setSelectionMode: (mode) => set({ selectionMode: mode }),
   setSelectionTool: (tool) => set({ selectionTool: tool }),
   setBrushSize: (size) => set({ brushSize: size }),
+  setSceneSize: (size) => set({ sceneSize: size }),
   clearSelection: () => set({ selectedVoxels: {} }),
 }));
