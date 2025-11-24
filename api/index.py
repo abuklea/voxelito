@@ -3,6 +3,8 @@ import json
 import logging
 import sys
 import math
+import asyncio
+import time
 from typing import List, Literal, Optional, Union, Dict
 from dotenv import load_dotenv
 import nest_asyncio
@@ -22,12 +24,30 @@ logging.getLogger("openai").setLevel(logging.INFO)
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
+
+# --- Custom Exceptions ---
+
+class APIKeyError(Exception):
+    """Raised when the OpenAI API key is missing or invalid."""
+    pass
+
+class RateLimitError(Exception):
+    """Raised when the user has exceeded the rate limit."""
+    pass
+
+class LLMTimeoutError(Exception):
+    """Raised when the LLM takes too long to respond."""
+    pass
+
+class InvalidSceneDataError(Exception):
+    """Raised when the scene data cannot be processed."""
+    pass
 
 # --- Pydantic Models for LLM ---
 
@@ -102,6 +122,11 @@ class ChunkResponse(BaseModel):
     rle_data: str
     palette: List[str]
 
+class ErrorDetails(BaseModel):
+    type: str
+    message: str
+    retry_after: int | None = None
+
 # --- Constants ---
 CHUNK_SIZE = 32
 PALETTE = [
@@ -135,6 +160,26 @@ PALETTE_DESCRIPTIONS = {
 }
 MIN_COORD = -512
 MAX_COORD = 512
+
+# --- Rate Limiting ---
+# Simple in-memory rate limiting (IP-based)
+# In production, use Redis
+RATE_LIMIT_WINDOW = 60 # seconds
+RATE_LIMIT_MAX_REQUESTS = 10
+request_counts = {}
+
+def check_rate_limit(client_ip: str):
+    current_time = time.time()
+    if client_ip not in request_counts:
+        request_counts[client_ip] = []
+
+    # Clean up old requests
+    request_counts[client_ip] = [t for t in request_counts[client_ip] if t > current_time - RATE_LIMIT_WINDOW]
+
+    if len(request_counts[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
+        raise RateLimitError("Too many requests")
+
+    request_counts[client_ip].append(current_time)
 
 # --- Rasterization Logic ---
 
@@ -415,6 +460,7 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
 
         except Exception as e:
             logger.error(f"Error rasterizing shape {shape}: {e}")
+            # We continue processing other shapes instead of failing completely
 
     # Convert chunks to RLE
     response_chunks = []
@@ -448,48 +494,48 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
 # --- Agent Initialization ---
 def get_agent(system_extension: str = ""):
     api_key = os.environ.get("OPENAI_API_KEY")
-    if api_key:
-        return Agent(
-            "openai:gpt-4o",
-            output_type=AgentResponse,
-            system_prompt=(
-                "You are Voxelito, an expert artistic voxel scene generator.\n"
-                "Personality: Creative, detail-oriented, enthusiastic. You love architecture and nature.\n"
-                "Greeting: Hola! Ready to build something spectacular?\n"
-                "\n"
-                "SCENE SCALES:\n"
-                "- Small: 100x100x100 (Coordinates approx -50 to 50). Good for single objects.\n"
-                "- Medium: 300x300x300 (Coordinates approx -150 to 150). DEFAULT. Good for dioramas.\n"
-                "- Large: 500x500x500 (Coordinates approx -250 to 250). Good for cities/landscapes.\n"
-                "\n"
-                "CONSTRUCTION STRATEGY:\n"
-                "To create 'High Quality' and 'Artistic' scenes, you must compose shapes intelligently.\n"
-                "1. **Structure**: Do not rely solely on the 'House' primitive for main buildings. It is a placeholder. For detailed architecture, build custom structures using 'Box' (walls), 'Wedge' (roofs), 'Cylinder' (pillars), and 'Line' (frames).\n"
-                "2. **Detail ('Greebling')**: Use 'Line' with width=1 to add fences, cables, railings, and window frames. Use small 'Box' or 'Wedge' shapes for chimneys, vents, and furniture.\n"
-                "3. **Nature**: Always use 'Tree' for vegetation. Group them to form forests. Use 'Sphere' for bushes or clouds.\n"
-                "4. **Terrain**: Use large 'Box' layers for the ground. Create elevation changes.\n"
-                "\n"
-                "TOOLS:\n"
-                "- Box: Walls, ground, platforms.\n"
-                "- Wedge: Ramps, roofs, stairs. Essential for non-boxy looks.\n"
-                "- Cylinder: Pillars, towers, tree trunks.\n"
-                "- Line: Details, fences, ropes. (Width > 1 for beams).\n"
-                "- Tree: Procedural vegetation (Oak/Pine).\n"
-                "- Sphere: Organic shapes.\n"
-                "- House: Basic background buildings only.\n"
-                "\n"
-                "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
-                "\n" + system_extension + "\n"
-                "RULES:\n"
-                "1. Output must be an AgentResponse.\n"
-                "2. Provide 'commentary' explaining your artistic choices AND your process. Explain what you are building step-by-step (e.g., 'First, I am laying the foundation...'). This serves as a progress indication for the user.\n"
-                "3. Center the main elements at (0,0,0).\n"
-                "4. If 'selectedVoxels' are present, ONLY edit that area or the immediate surroundings. Acknowledge the selection in your commentary.\n"
-                "5. Be conversational and engaging. Ask clarifying questions if the request is vague, but still provide a best-guess scene.\n"
-            )
+    if not api_key:
+        raise APIKeyError("OPENAI_API_KEY not configured")
+
+    return Agent(
+        "openai:gpt-4o",
+        output_type=AgentResponse,
+        system_prompt=(
+            "You are Voxelito, an expert artistic voxel scene generator.\n"
+            "Personality: Creative, detail-oriented, enthusiastic. You love architecture and nature.\n"
+            "Greeting: Hola! Ready to build something spectacular?\n"
+            "\n"
+            "SCENE SCALES:\n"
+            "- Small: 100x100x100 (Coordinates approx -50 to 50). Good for single objects.\n"
+            "- Medium: 300x300x300 (Coordinates approx -150 to 150). DEFAULT. Good for dioramas.\n"
+            "- Large: 500x500x500 (Coordinates approx -250 to 250). Good for cities/landscapes.\n"
+            "\n"
+            "CONSTRUCTION STRATEGY:\n"
+            "To create 'High Quality' and 'Artistic' scenes, you must compose shapes intelligently.\n"
+            "1. **Structure**: Do not rely solely on the 'House' primitive for main buildings. It is a placeholder. For detailed architecture, build custom structures using 'Box' (walls), 'Wedge' (roofs), 'Cylinder' (pillars), and 'Line' (frames).\n"
+            "2. **Detail ('Greebling')**: Use 'Line' with width=1 to add fences, cables, railings, and window frames. Use small 'Box' or 'Wedge' shapes for chimneys, vents, and furniture.\n"
+            "3. **Nature**: Always use 'Tree' for vegetation. Group them to form forests. Use 'Sphere' for bushes or clouds.\n"
+            "4. **Terrain**: Use large 'Box' layers for the ground. Create elevation changes.\n"
+            "\n"
+            "TOOLS:\n"
+            "- Box: Walls, ground, platforms.\n"
+            "- Wedge: Ramps, roofs, stairs. Essential for non-boxy looks.\n"
+            "- Cylinder: Pillars, towers, tree trunks.\n"
+            "- Line: Details, fences, ropes. (Width > 1 for beams).\n"
+            "- Tree: Procedural vegetation (Oak/Pine).\n"
+            "- Sphere: Organic shapes.\n"
+            "- House: Basic background buildings only.\n"
+            "\n"
+            "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
+            "\n" + system_extension + "\n"
+            "RULES:\n"
+            "1. Output must be an AgentResponse.\n"
+            "2. Provide 'commentary' explaining your artistic choices AND your process. Explain what you are building step-by-step (e.g., 'First, I am laying the foundation...'). This serves as a progress indication for the user.\n"
+            "3. Center the main elements at (0,0,0).\n"
+            "4. If 'selectedVoxels' are present, ONLY edit that area or the immediate surroundings. Acknowledge the selection in your commentary.\n"
+            "5. Be conversational and engaging. Ask clarifying questions if the request is vague, but still provide a best-guess scene.\n"
         )
-    logger.error("OPENAI_API_KEY not found.")
-    return None
+    )
 
 app = FastAPI()
 
@@ -502,9 +548,12 @@ app.add_middleware(
 )
 
 # --- Streaming Logic ---
-async def stream_handler(body: dict):
-    logger.info("Stream handler started")
+async def stream_handler(body: dict, client_ip: str):
+    logger.info(f"Stream handler started for IP: {client_ip}")
     try:
+        # Rate limit check
+        check_rate_limit(client_ip)
+
         variables = body.get("variables", {})
         data = variables.get("data", {})
         messages = data.get("messages", [])
@@ -542,11 +591,15 @@ async def stream_handler(body: dict):
         logger.info(f"Extra System Prompt (Context): {extra_system_prompt[:500]}...")
 
         agent = get_agent(extra_system_prompt)
-        if not agent:
-            yield f"data: {json.dumps({'error': 'Agent not initialized'})}\n\n"
-            return
 
-        result = await agent.run(final_prompt)
+        # Run agent with timeout
+        try:
+            result = await asyncio.wait_for(
+                agent.run(final_prompt),
+                timeout=120.0  # 2 minute timeout
+            )
+        except asyncio.TimeoutError:
+            raise LLMTimeoutError("Generation took too long.")
 
         if hasattr(result, 'data'):
              agent_response = result.data
@@ -582,9 +635,94 @@ async def stream_handler(body: dict):
         logger.info("Stream handler finished, yielding response")
         yield f"data: {json.dumps(graphql_response)}\n\n"
 
+    except APIKeyError as e:
+        logger.error(f"API Key Error: {e}")
+        error_msg = json.dumps({
+            "error": {
+                "type": "api_key",
+                "message": "Service configuration error. Please contact support."
+            }
+        })
+        graphql_response = {
+            "data": {
+                "generateCopilotResponse": {
+                    "messages": [{
+                        "__typename": "TextMessageOutput",
+                        "content": [error_msg],
+                        "role": "assistant",
+                        "id": "msg_error"
+                    }]
+                }
+            }
+        }
+        yield f"data: {json.dumps(graphql_response)}\n\n"
+
+    except RateLimitError as e:
+        logger.warning(f"Rate Limit exceeded for {client_ip}")
+        error_msg = json.dumps({
+            "error": {
+                "type": "rate_limit",
+                "message": "Too many requests. Please wait before trying again.",
+                "retry_after": RATE_LIMIT_WINDOW
+            }
+        })
+        graphql_response = {
+            "data": {
+                "generateCopilotResponse": {
+                    "messages": [{
+                        "__typename": "TextMessageOutput",
+                        "content": [error_msg],
+                        "role": "assistant",
+                        "id": "msg_error"
+                    }]
+                }
+            }
+        }
+        yield f"data: {json.dumps(graphql_response)}\n\n"
+
+    except LLMTimeoutError as e:
+        logger.error("LLM timeout")
+        error_msg = json.dumps({
+            "error": {
+                "type": "timeout",
+                "message": "Generation took too long. Please try a simpler prompt."
+            }
+        })
+        graphql_response = {
+            "data": {
+                "generateCopilotResponse": {
+                    "messages": [{
+                        "__typename": "TextMessageOutput",
+                        "content": [error_msg],
+                        "role": "assistant",
+                        "id": "msg_error"
+                    }]
+                }
+            }
+        }
+        yield f"data: {json.dumps(graphql_response)}\n\n"
+
     except Exception as e:
         logger.error(f"Error in stream_handler: {e}", exc_info=True)
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        error_msg = json.dumps({
+            "error": {
+                "type": "internal",
+                "message": f"Something went wrong: {str(e)}"
+            }
+        })
+        graphql_response = {
+            "data": {
+                "generateCopilotResponse": {
+                    "messages": [{
+                        "__typename": "TextMessageOutput",
+                        "content": [error_msg],
+                        "role": "assistant",
+                        "id": "msg_error"
+                    }]
+                }
+            }
+        }
+        yield f"data: {json.dumps(graphql_response)}\n\n"
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):
@@ -609,4 +747,6 @@ async def run_agent_custom(request: Request):
         }
         return JSONResponse(discovery_data)
 
-    return StreamingResponse(stream_handler(body), media_type="text/event-stream")
+    client_ip = request.client.host if request.client else "unknown"
+
+    return StreamingResponse(stream_handler(body, client_ip), media_type="text/event-stream")

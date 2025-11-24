@@ -2,7 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { VoxelWorld } from '../../lib/VoxelWorld';
 import { useVoxelStore } from '../../store/voxelStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import type { SelectionMode, VoxelSelection } from '../../store/voxelStore';
+
+const MAX_SELECTION_SIZE = 10000;
 
 interface InteractionControllerProps {
   voxelWorld: VoxelWorld | null;
@@ -18,6 +21,8 @@ export const InteractionController: React.FC<InteractionControllerProps> = ({ vo
     addVoxelToSelection,
     removeVoxelFromSelection,
   } = useVoxelStore();
+
+  const { showToast } = useNotificationStore();
 
   const isDragging = useRef(false);
   const dragStart = useRef<{ x: number; y: number; z: number } | null>(null);
@@ -170,17 +175,17 @@ export const InteractionController: React.FC<InteractionControllerProps> = ({ vo
             voxelsToApply = getVoxelsInBox(dragStart.current, targetVoxel);
         } else if (selectionTool === 'sphere') {
              voxelsToApply = getVoxelsInSphere(targetVoxel, brushSize);
-             // For sphere/cursor drag, we accumulate the path?
-             // If I drag a sphere, I want to paint the sphere along the path.
-             // My simple logic here resets to 'selectionAtStart' then adds the CURRENT sphere.
-             // This is wrong for painting.
-             // For painting (Cursor/Sphere), we should Accumulate.
         } else {
              // Cursor (Single)
              voxelsToApply = [{
                  position: [targetVoxel.x, targetVoxel.y, targetVoxel.z],
                  chunkId: `${Math.floor(targetVoxel.x/32)},${Math.floor(targetVoxel.y/32)},${Math.floor(targetVoxel.z/32)}`
              }];
+        }
+
+        if (voxelsToApply.length > MAX_SELECTION_SIZE) {
+            showToast(`Selection too large (${voxelsToApply.length} voxels). Max is ${MAX_SELECTION_SIZE}.`, 'error');
+            return;
         }
 
         // Logic divergence:
@@ -198,11 +203,19 @@ export const InteractionController: React.FC<InteractionControllerProps> = ({ vo
                  voxelsToApply.forEach(v => {
                      final[getKey(...v.position)] = v;
                  });
+                 if (Object.keys(final).length > MAX_SELECTION_SIZE) {
+                     showToast("Total selection exceeds limit.", 'error');
+                     return;
+                 }
                  setSelectedVoxels(final);
              } else if (mode === 'add') {
                  voxelsToApply.forEach(v => {
                      newSelection[getKey(...v.position)] = v;
                  });
+                 if (Object.keys(newSelection).length > MAX_SELECTION_SIZE) {
+                     showToast("Total selection exceeds limit.", 'error');
+                     return;
+                 }
                  setSelectedVoxels(newSelection);
              } else if (mode === 'subtract') {
                  voxelsToApply.forEach(v => {
@@ -213,31 +226,32 @@ export const InteractionController: React.FC<InteractionControllerProps> = ({ vo
         } else {
             // Brush/Cursor logic (Paint)
             // We modify the store directly and cumulatively.
-            // BUT "replace" mode with brush?
-            // Usually means "Paint replaces what's there"? No, usually replace clears everything then starts painting.
-            // If isStart and mode is replace, clear first.
 
             if (isStart && mode === 'replace') {
                 setSelectedVoxels({});
-                // After clearing, we act as 'add' for the duration of the drag
-                // But we need to be careful not to clear on every move.
-                // So we can just set effective mode to 'add' for subsequent moves?
-                // Or just handle it:
-                // We cleared. Now we add voxelsToApply.
+                // Check if adding creates too many
+                if (voxelsToApply.length > MAX_SELECTION_SIZE) {
+                     showToast("Selection exceeds limit.", 'error');
+                     return;
+                }
+
                 const final: Record<string, VoxelSelection> = {};
                 voxelsToApply.forEach(v => {
                      final[getKey(...v.position)] = v;
                 });
                 setSelectedVoxels(final);
             } else {
-                // Just add/subtract from current (live) state
-                // Note: We don't use selectionAtStart for painting.
-
-                // Wait, if mode is 'replace' and I move, I want to continue adding to the new selection?
-                // Yes.
                 const effectiveMode = (mode === 'replace') ? 'add' : mode;
 
                 if (effectiveMode === 'add') {
+                     // Check total size
+                     const currentCount = Object.keys(useVoxelStore.getState().selectedVoxels).length;
+                     if (currentCount + voxelsToApply.length > MAX_SELECTION_SIZE) {
+                         // Only warn once per drag?
+                         // For now, just warn and don't add.
+                         if (Math.random() < 0.1) showToast("Selection limit reached.", 'error'); // throttle toast
+                         return;
+                     }
                      voxelsToApply.forEach(v => addVoxelToSelection(v));
                 } else if (effectiveMode === 'subtract') {
                      voxelsToApply.forEach(v => removeVoxelFromSelection(v.position));
