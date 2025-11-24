@@ -26,4 +26,8 @@ export const palette: VoxelPalette = {
   metal: { color: "#607d8b" },
   snow: { color: "#ffffff" },
   lava: { color: "#ff5722" },
+  flower_red: { color: "#f44336" },
+  flower_yellow: { color: "#ffeb3b" },
+  flower_purple: { color: "#9c27b0" },
+  shrub: { color: "#388e3c" },
 };
