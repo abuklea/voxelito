@@ -13,6 +13,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { NeonLogo } from './components/NeonLogo';
 import { OfflineIndicator, Toast } from './components/Notifications';
 import { useNotificationStore } from './store/notificationStore';
+import { SceneSettingsModal } from './components/SceneSettingsModal';
 import "@copilotkit/react-ui/styles.css";
 
 const SIZES = {
@@ -23,71 +24,82 @@ const SIZES = {
 };
 
 interface HeaderProps {
-  size: string;
-  setSize: (s: string) => void;
+  currentSize: [number, number, number];
+  onSizeChange: (label: string) => void;
   isLoading: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ size, setSize, isLoading }) => (
-  <header style={{
-    height: '80px',
-    backgroundColor: 'var(--bg-secondary)',
-    borderBottom: '1px solid var(--border-color)',
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 20px',
-    boxSizing: 'border-box',
-    justifyContent: 'space-between'
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-      <NeonLogo />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Size:</label>
-          <select
-            value={size}
-            onChange={e => setSize(e.target.value)}
-            style={{
-                padding: '5px',
+const Header: React.FC<HeaderProps> = ({ currentSize, onSizeChange, isLoading }) => {
+  const sizeStr = `${currentSize[0]}x${currentSize[1]}x${currentSize[2]}`;
+
+  // Find matching label or default to Custom
+  let selectedValue = "Custom";
+  Object.entries(SIZES).forEach(([label, val]) => {
+      if (val === sizeStr) selectedValue = label;
+  });
+
+  return (
+    <header style={{
+      height: '80px',
+      backgroundColor: 'var(--bg-secondary)',
+      borderBottom: '1px solid var(--border-color)',
+      display: 'flex',
+      alignItems: 'center',
+      padding: '0 20px',
+      boxSizing: 'border-box',
+      justifyContent: 'space-between'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <NeonLogo />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Size:</label>
+            <select
+              value={selectedValue}
+              onChange={e => onSizeChange(e.target.value)}
+              style={{
+                  padding: '5px',
+                  borderRadius: '4px',
+                  backgroundColor: '#333',
+                  color: 'white',
+                  border: '1px solid #555'
+              }}
+            >
+              {Object.entries(SIZES).map(([label, val]) => (
+                  <option key={label} value={label}>{label} ({val})</option>
+              ))}
+              <option value="Custom">Custom...</option>
+            </select>
+        </div>
+        {isLoading && (
+            <div style={{
+                color: '#7c3aed',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                padding: '5px 10px',
                 borderRadius: '4px',
-                backgroundColor: '#333',
-                color: 'white',
-                border: '1px solid #555'
-            }}
-          >
-            {Object.entries(SIZES).map(([label, val]) => (
-                <option key={label} value={label}>{label} ({val})</option>
-            ))}
-          </select>
+                border: '1px solid rgba(124, 58, 237, 0.3)'
+            }}>
+                <div className="spinner" style={{
+                    width: '16px', height: '16px',
+                    border: '2px solid #7c3aed',
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                }}/>
+                <span>Agent Working...</span>
+            </div>
+        )}
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
-      {isLoading && (
-          <div style={{
-              color: '#7c3aed',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              backgroundColor: 'rgba(124, 58, 237, 0.1)',
-              padding: '5px 10px',
-              borderRadius: '4px',
-              border: '1px solid rgba(124, 58, 237, 0.3)'
-          }}>
-              <div className="spinner" style={{
-                  width: '16px', height: '16px',
-                  border: '2px solid #7c3aed',
-                  borderTopColor: 'transparent',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-              }}/>
-              <span>Agent Working...</span>
-          </div>
-      )}
-      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-    </div>
-    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-      ALPHA BUILD
-    </div>
-  </header>
-);
+      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+        ALPHA BUILD
+      </div>
+    </header>
+  );
+};
 
 function mergeSceneData(current: SceneData | null, incoming: SceneData): SceneData {
   if (!current) return incoming;
@@ -109,11 +121,12 @@ function mergeSceneData(current: SceneData | null, incoming: SceneData): SceneDa
 function VoxelApp() {
   const { voxelWorld, ref } = useVoxelWorld();
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
-  const [size, setSize] = useState("Medium");
   const { visibleMessages, isLoading } = useCopilotChat();
   const voxelStore = useVoxelStore();
+  const { sceneSize, setSceneSize } = voxelStore;
   const currentSelection = voxelStore?.selectedVoxels || {};
   const { message, type, showToast, hideToast } = useNotificationStore();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (voxelWorld) {
@@ -121,6 +134,26 @@ function VoxelApp() {
     }
     (window as any).voxelStore = useVoxelStore;
   }, [voxelWorld]);
+
+  // Sync scene size with VoxelWorld
+  useEffect(() => {
+      if (voxelWorld) {
+          voxelWorld.setSceneSize(sceneSize[0], sceneSize[1], sceneSize[2]);
+      }
+  }, [voxelWorld, sceneSize]);
+
+  const handleSizeChange = (val: string) => {
+      if (val === "Custom") {
+          setIsSettingsOpen(true);
+      } else {
+          // Preset
+          const sizeStr = SIZES[val as keyof typeof SIZES];
+          if (sizeStr) {
+              const [w, h, d] = sizeStr.split('x').map(Number);
+              setSceneSize([w, h, d]);
+          }
+      }
+  };
 
   // --- Context for the Agent ---
 
@@ -132,11 +165,17 @@ function VoxelApp() {
 
   // 2. Selection
   useCopilotReadable({
-    description: "The current set of selected voxels. If non-empty, only modify these voxels or the area around them. Format: List of [x, y, z] coordinates.",
+    description: "The current set of selected voxels.",
     value: Object.values(currentSelection).map(v => v.position)
   });
 
-  // 3. Screenshot
+  // 3. Scene Dimensions
+  useCopilotReadable({
+    description: "The current maximum dimensions of the scene [width, height, depth]. The agent should respect these bounds.",
+    value: sceneSize
+  });
+
+  // 4. Screenshot
   useCopilotReadable({
     description: "A screenshot of the current 3D viewport (Base64 encoded JPEG).",
     value: () => {
@@ -181,7 +220,7 @@ function VoxelApp() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-primary)' }}>
       <OfflineIndicator />
       <Toast message={message} type={type} onClose={hideToast} />
-      <Header size={size} setSize={setSize} isLoading={isLoading} />
+      <Header currentSize={sceneSize} onSizeChange={handleSizeChange} isLoading={isLoading} />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <Viewer ref={ref} />
         <InteractionController voxelWorld={voxelWorld} />
@@ -200,6 +239,7 @@ function VoxelApp() {
           initial: "Describe a scene to generate!",
         }}
       />
+      <SceneSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }
