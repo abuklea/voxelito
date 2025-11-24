@@ -19,7 +19,11 @@ export type VoxelType =
   | "neon_pink"
   | "metal"
   | "snow"
-  | "lava";
+  | "lava"
+  | "flower_red"
+  | "flower_yellow"
+  | "flower_purple"
+  | "shrub";
 
 export interface Voxel {
   type: VoxelType;

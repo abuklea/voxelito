@@ -4,7 +4,8 @@ CHUNK_SIZE = 32
 PALETTE = [
   "air", "grass", "stone", "dirt", "water", "wood", "leaves", "sand",
   "brick", "roof", "glass", "plank", "concrete", "asphalt", "road_white",
-  "road_yellow", "neon_blue", "neon_pink", "metal", "snow", "lava"
+  "road_yellow", "neon_blue", "neon_pink", "metal", "snow", "lava",
+  "flower_red", "flower_yellow", "flower_purple", "shrub"
 ]
 PALETTE_MAP = {name: i for i, name in enumerate(PALETTE)}
 
@@ -29,5 +30,9 @@ PALETTE_DESCRIPTIONS = {
     "neon_pink": "Glowing pink",
     "metal": "Shiny metal",
     "snow": "White snow",
-    "lava": "Glowing lava"
+    "lava": "Glowing lava",
+    "flower_red": "Red Flower",
+    "flower_yellow": "Yellow Flower",
+    "flower_purple": "Purple Flower",
+    "shrub": "Green shrub/bush"
 }

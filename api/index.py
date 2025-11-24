@@ -108,8 +108,20 @@ class House(BaseModel):
     material_wall: str = 'brick'
     material_roof: str = 'roof'
 
+class Flower(BaseModel):
+    type: Literal['flower'] = 'flower'
+    base: List[int] = Field(description="[x, y, z] base of the stem")
+    height: int = Field(default=1, description="Height of the stem")
+    color: Literal['red', 'yellow', 'purple'] = 'red'
+
+class Shrub(BaseModel):
+    type: Literal['shrub'] = 'shrub'
+    center: List[int] = Field(description="[x, y, z] center of the shrub base")
+    radius: float = Field(description="Radius of the shrub")
+    material: str = 'shrub'
+
 class SceneDescription(BaseModel):
-    shapes: List[Union[Box, Sphere, Pyramid, Cylinder, Line, Wedge, Tree, House]] = Field(description="List of shapes composing the scene")
+    shapes: List[Union[Box, Sphere, Pyramid, Cylinder, Line, Wedge, Tree, House, Flower, Shrub]] = Field(description="List of shapes composing the scene")
 
 class AgentResponse(BaseModel):
     commentary: str = Field(description="Conversational response to the user.")
@@ -382,6 +394,36 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
                              for z in range(sz, ez):
                                  for x in range(x_start, x_end + 1):
                                      grid.set_voxel(x, y, z, mat_roof)
+            elif isinstance(shape, Flower):
+                bx, by, bz = shape.base
+                h = shape.height
+                flower_mat = PALETTE_MAP.get(f"flower_{shape.color}", PALETTE_MAP['flower_red'])
+                leaves_mat = PALETTE_MAP['leaves']
+                # Stem
+                for y in range(by, by + h):
+                     grid.set_voxel(bx, y, bz, leaves_mat)
+                # Flower head
+                grid.set_voxel(bx, by + h, bz, flower_mat)
+                grid.set_voxel(bx + 1, by + h, bz, flower_mat)
+                grid.set_voxel(bx - 1, by + h, bz, flower_mat)
+                grid.set_voxel(bx, by + h, bz + 1, flower_mat)
+                grid.set_voxel(bx, by + h, bz - 1, flower_mat)
+
+            elif isinstance(shape, Shrub):
+                cx, cy, cz = shape.center
+                r = shape.radius
+                r_sq = r * r
+                mat = PALETTE_MAP.get(shape.material, PALETTE_MAP['shrub'])
+                min_x, max_x = int(cx - r), int(cx + r) + 1
+                min_y, max_y = int(cy - r), int(cy + r) + 1
+                min_z, max_z = int(cz - r), int(cz + r) + 1
+                for x in range(min_x, max_x):
+                    for y in range(min_y, max_y):
+                        for z in range(min_z, max_z):
+                            if (x - cx)**2 + (y - cy)**2 + (z - cz)**2 <= r_sq: # Assuming half-sphere for shrub sitting on ground usually? Or full sphere? Full sphere is fine.
+                                # To make it look like a bush on the ground, we might want to flatten the bottom slightly or just let it clip.
+                                # Let's stick to full sphere for now.
+                                grid.set_voxel(x, y, z, mat)
         except Exception as e:
             logger.error(f"Error rasterizing shape {shape}: {e}")
 
