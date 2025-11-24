@@ -41,6 +41,7 @@ The project is in the final polish phase (P4S15).
 -   **[✓] AI Generation:** Scene generation from text, Context awareness (selection, screenshot).
 -   **[✓] Tools:** Cursor, Box, Sphere selection tools. Modes: Replace, Add, Subtract.
 -   **[✓] UI:** Toolbar, Responsive Header, CopilotPopup, Toast Notifications.
+-   **[✓] Grid System:** Aligned with voxel boundaries (unit steps), added Toggle control.
 -   **[✓] Polish:** Error handling, Loading states, Mobile responsiveness (in progress).
 
 ## 5. Key Technical Decisions & Learnings
