@@ -33,6 +33,7 @@ from api.pipeline.octree import SparseVoxelOctree, CHUNK_SIZE
 from api.pipeline.wfc import WFCLayoutGenerator, ZoneType
 from api.pipeline.assets import AssetGenerator
 from api.pipeline.super_res import SuperResolver
+from api.copilot_utils import CopilotResponseBuilder
 
 # Load environment variables
 load_dotenv(dotenv_path='api/.env.local')
@@ -201,9 +202,6 @@ def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
         try:
             mat_name = getattr(shape, 'material', 'stone')
             mat_idx = PALETTE_MAP.get(mat_name, 1)
-            # ... (Full implementation of shapes omitted for brevity in this step, but I must include it because I am overwriting the file)
-            # Wait, I cannot omit it if I overwrite. I must copy the logic.
-            # I will paste the previous logic here.
 
             if isinstance(shape, Box):
                 sx, sy, sz = shape.start
@@ -540,8 +538,6 @@ async def stream_handler(body: dict, client_ip: str):
         else:
              raise ValueError("Cannot find data in agent result")
 
-        response_text = agent_response.commentary
-
         chunks_data = []
         if agent_response.layout_intent:
              # Use Pipeline
@@ -553,49 +549,15 @@ async def stream_handler(body: dict, client_ip: str):
              chunks = rasterize_scene(agent_response.scene)
              chunks_data = [chunk.model_dump() for chunk in chunks]
 
+        data_payload = None
         if chunks_data:
-             scene_data = { "chunks": chunks_data }
-             json_str = json.dumps(scene_data)
-             response_text += f"\n\n```json\n{json_str}\n```"
+             data_payload = { "chunks": chunks_data }
 
-        graphql_response = {
-            "data": {
-                "generateCopilotResponse": {
-                    "messages": [
-                        {
-                            "__typename": "TextMessageOutput",
-                            "content": [response_text],
-                            "role": "assistant",
-                            "id": "msg_response"
-                        }
-                    ]
-                }
-            }
-        }
-
-        yield f"data: {json.dumps(graphql_response)}\n\n"
+        yield CopilotResponseBuilder.create_success_response(agent_response.commentary, data_payload)
 
     except Exception as e:
         logger.error(f"Error in stream_handler: {e}", exc_info=True)
-        error_msg = json.dumps({
-            "error": {
-                "type": "internal",
-                "message": f"Something went wrong: {str(e)}"
-            }
-        })
-        graphql_response = {
-            "data": {
-                "generateCopilotResponse": {
-                    "messages": [{
-                        "__typename": "TextMessageOutput",
-                        "content": [error_msg],
-                        "role": "assistant",
-                        "id": "msg_error"
-                    }]
-                }
-            }
-        }
-        yield f"data: {json.dumps(graphql_response)}\n\n"
+        yield CopilotResponseBuilder.create_error_response(str(e))
 
 @app.post("/api/generate")
 async def run_agent_custom(request: Request):

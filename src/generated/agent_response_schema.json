@@ -1,0 +1,512 @@
+{
+  "$defs": {
+    "Box": {
+      "properties": {
+        "type": {
+          "const": "box",
+          "default": "box",
+          "title": "Type",
+          "type": "string"
+        },
+        "start": {
+          "description": "[x, y, z] coordinate of the starting corner",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Start",
+          "type": "array"
+        },
+        "size": {
+          "description": "[width, height, depth] of the box",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Size",
+          "type": "array"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "size",
+        "material"
+      ],
+      "title": "Box",
+      "type": "object"
+    },
+    "Cylinder": {
+      "properties": {
+        "type": {
+          "const": "cylinder",
+          "default": "cylinder",
+          "title": "Type",
+          "type": "string"
+        },
+        "start": {
+          "description": "[x, y, z] center of the base",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Start",
+          "type": "array"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "radius": {
+          "title": "Radius",
+          "type": "number"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        },
+        "axis": {
+          "default": "y",
+          "enum": [
+            "x",
+            "y",
+            "z"
+          ],
+          "title": "Axis",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "height",
+        "radius",
+        "material"
+      ],
+      "title": "Cylinder",
+      "type": "object"
+    },
+    "Flower": {
+      "properties": {
+        "type": {
+          "const": "flower",
+          "default": "flower",
+          "title": "Type",
+          "type": "string"
+        },
+        "base": {
+          "description": "[x, y, z] base of the stem",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Base",
+          "type": "array"
+        },
+        "height": {
+          "default": 1,
+          "description": "Height of the stem",
+          "title": "Height",
+          "type": "integer"
+        },
+        "color": {
+          "default": "red",
+          "enum": [
+            "red",
+            "yellow",
+            "purple"
+          ],
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "title": "Flower",
+      "type": "object"
+    },
+    "House": {
+      "properties": {
+        "type": {
+          "const": "house",
+          "default": "house",
+          "title": "Type",
+          "type": "string"
+        },
+        "base_center": {
+          "description": "[x, y, z] center of the floor",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Base Center",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "depth": {
+          "title": "Depth",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Wall height",
+          "title": "Height",
+          "type": "integer"
+        },
+        "roof_height": {
+          "title": "Roof Height",
+          "type": "integer"
+        },
+        "material_wall": {
+          "default": "brick",
+          "title": "Material Wall",
+          "type": "string"
+        },
+        "material_roof": {
+          "default": "roof",
+          "title": "Material Roof",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_center",
+        "width",
+        "depth",
+        "height",
+        "roof_height"
+      ],
+      "title": "House",
+      "type": "object"
+    },
+    "Line": {
+      "properties": {
+        "type": {
+          "const": "line",
+          "default": "line",
+          "title": "Type",
+          "type": "string"
+        },
+        "start": {
+          "description": "[x, y, z] start point",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Start",
+          "type": "array"
+        },
+        "end": {
+          "description": "[x, y, z] end point",
+          "items": {
+            "type": "integer"
+          },
+          "title": "End",
+          "type": "array"
+        },
+        "width": {
+          "default": 1,
+          "description": "Thickness of the line",
+          "title": "Width",
+          "type": "integer"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "material"
+      ],
+      "title": "Line",
+      "type": "object"
+    },
+    "Pyramid": {
+      "properties": {
+        "type": {
+          "const": "pyramid",
+          "default": "pyramid",
+          "title": "Type",
+          "type": "string"
+        },
+        "base_center": {
+          "description": "[x, y, z] center of the square base",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Base Center",
+          "type": "array"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_center",
+        "height",
+        "material"
+      ],
+      "title": "Pyramid",
+      "type": "object"
+    },
+    "SceneDescription": {
+      "properties": {
+        "shapes": {
+          "description": "List of shapes composing the scene",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Box"
+              },
+              {
+                "$ref": "#/$defs/Sphere"
+              },
+              {
+                "$ref": "#/$defs/Pyramid"
+              },
+              {
+                "$ref": "#/$defs/Cylinder"
+              },
+              {
+                "$ref": "#/$defs/Line"
+              },
+              {
+                "$ref": "#/$defs/Wedge"
+              },
+              {
+                "$ref": "#/$defs/Tree"
+              },
+              {
+                "$ref": "#/$defs/House"
+              },
+              {
+                "$ref": "#/$defs/Flower"
+              },
+              {
+                "$ref": "#/$defs/Shrub"
+              }
+            ]
+          },
+          "title": "Shapes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "shapes"
+      ],
+      "title": "SceneDescription",
+      "type": "object"
+    },
+    "Shrub": {
+      "properties": {
+        "type": {
+          "const": "shrub",
+          "default": "shrub",
+          "title": "Type",
+          "type": "string"
+        },
+        "center": {
+          "description": "[x, y, z] center of the shrub base",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Center",
+          "type": "array"
+        },
+        "radius": {
+          "description": "Radius of the shrub",
+          "title": "Radius",
+          "type": "number"
+        },
+        "material": {
+          "default": "shrub",
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "center",
+        "radius"
+      ],
+      "title": "Shrub",
+      "type": "object"
+    },
+    "Sphere": {
+      "properties": {
+        "type": {
+          "const": "sphere",
+          "default": "sphere",
+          "title": "Type",
+          "type": "string"
+        },
+        "center": {
+          "description": "[x, y, z] center of the sphere",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Center",
+          "type": "array"
+        },
+        "radius": {
+          "title": "Radius",
+          "type": "number"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "center",
+        "radius",
+        "material"
+      ],
+      "title": "Sphere",
+      "type": "object"
+    },
+    "Tree": {
+      "properties": {
+        "type": {
+          "const": "tree",
+          "default": "tree",
+          "title": "Type",
+          "type": "string"
+        },
+        "base": {
+          "description": "[x, y, z] base of the trunk",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Base",
+          "type": "array"
+        },
+        "height": {
+          "description": "Total height",
+          "title": "Height",
+          "type": "integer"
+        },
+        "kind": {
+          "default": "oak",
+          "enum": [
+            "oak",
+            "pine"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "material_trunk": {
+          "default": "wood",
+          "title": "Material Trunk",
+          "type": "string"
+        },
+        "material_leaves": {
+          "default": "leaves",
+          "title": "Material Leaves",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base",
+        "height"
+      ],
+      "title": "Tree",
+      "type": "object"
+    },
+    "Wedge": {
+      "properties": {
+        "type": {
+          "const": "wedge",
+          "default": "wedge",
+          "title": "Type",
+          "type": "string"
+        },
+        "start": {
+          "description": "[x, y, z] corner of the bounding box",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Start",
+          "type": "array"
+        },
+        "size": {
+          "description": "[width, height, depth]",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Size",
+          "type": "array"
+        },
+        "orientation": {
+          "description": "Direction the ramp ascends towards",
+          "enum": [
+            "xn",
+            "xp",
+            "zn",
+            "zp"
+          ],
+          "title": "Orientation",
+          "type": "string"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "size",
+        "orientation",
+        "material"
+      ],
+      "title": "Wedge",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "commentary": {
+      "description": "Conversational response to the user.",
+      "title": "Commentary",
+      "type": "string"
+    },
+    "scene": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SceneDescription"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The 3D scene generation data (for specific shapes/edits)."
+    },
+    "layout_intent": {
+      "anyOf": [
+        {
+          "enum": [
+            "city",
+            "village",
+            "forest"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "If generating a large NEW scene, specify the type here to use the Advanced Pipeline.",
+      "title": "Layout Intent"
+    }
+  },
+  "required": [
+    "commentary"
+  ],
+  "title": "AgentResponse",
+  "type": "object"
+}

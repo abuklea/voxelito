@@ -1,16 +1,12 @@
 import type { VoxelChunkData } from '../types';
 
-/**
- * Web Worker for generating voxel meshes using the Greedy Meshing algorithm.
- *
- * This worker receives chunk data and dimensions, processes it to reduce the vertex count
- * by merging adjacent faces of the same voxel type into larger quads, and returns
- * the geometry data (vertices, indices, voxelIds).
- *
- * @param event - The message event containing `VoxelChunkData`.
- */
-self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
-    const { chunkData, dimensions } = event.data;
+export interface MeshResult {
+    vertices: Float32Array;
+    indices: Uint32Array;
+    voxelIds: Uint8Array;
+}
+
+export function greedyMesh(chunkData: Uint8Array, dimensions: [number, number, number]): MeshResult {
     const [width, height, depth] = dimensions;
 
     // Optimization: Check if chunk is empty
@@ -22,13 +18,11 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
         }
     }
     if (isEmpty) {
-        self.postMessage({
+        return {
             vertices: new Float32Array(0),
             indices: new Uint32Array(0),
-            voxelIds: new Uint8Array(0),
-            chunkId: event.data.chunkId,
-        });
-        return;
+            voxelIds: new Uint8Array(0)
+        };
     }
 
     const vertices: number[] = [];
@@ -122,11 +116,6 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
 
                         vertices.push(...v1, ...v2, ...v3, ...v4);
 
-                        // For each vertex, store the voxel ID (absolute value because negative ID means back-face in slice logic)
-                        // Note: In the slice logic, voxelType is positive if facing one way, negative if other.
-                        // But the actual voxel ID in chunkData is always positive.
-                        // The slice logic stores `voxelType1` or `-voxelType2`.
-                        // So `Math.abs(voxelType)` is the voxel ID.
                         const actualVoxelId = Math.abs(voxelType);
                         voxelIds.push(actualVoxelId, actualVoxelId, actualVoxelId, actualVoxelId);
 
@@ -151,14 +140,27 @@ self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
         }
     }
 
-    const verticesArray = new Float32Array(vertices);
-    const indicesArray = new Uint32Array(indices);
-    const voxelIdsArray = new Uint8Array(voxelIds);
+    return {
+        vertices: new Float32Array(vertices),
+        indices: new Uint32Array(indices),
+        voxelIds: new Uint8Array(voxelIds)
+    };
+}
 
-    self.postMessage({
-        vertices: verticesArray,
-        indices: indicesArray,
-        voxelIds: voxelIdsArray,
-        chunkId: event.data.chunkId,
-    }, [verticesArray.buffer, indicesArray.buffer, voxelIdsArray.buffer]);
-};
+/**
+ * Web Worker for generating voxel meshes using the Greedy Meshing algorithm.
+ */
+if (typeof self !== 'undefined') {
+    self.onmessage = (event: MessageEvent<VoxelChunkData>) => {
+        const { chunkData, dimensions, chunkId } = event.data;
+
+        const result = greedyMesh(chunkData, dimensions);
+
+        self.postMessage({
+            vertices: result.vertices,
+            indices: result.indices,
+            voxelIds: result.voxelIds,
+            chunkId: chunkId,
+        }, [result.vertices.buffer, result.indices.buffer, result.voxelIds.buffer]);
+    };
+}
