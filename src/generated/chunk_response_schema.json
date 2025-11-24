@@ -1,0 +1,29 @@
+{
+  "properties": {
+    "position": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Position",
+      "type": "array"
+    },
+    "rle_data": {
+      "title": "Rle Data",
+      "type": "string"
+    },
+    "palette": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Palette",
+      "type": "array"
+    }
+  },
+  "required": [
+    "position",
+    "rle_data",
+    "palette"
+  ],
+  "title": "ChunkResponse",
+  "type": "object"
+}
