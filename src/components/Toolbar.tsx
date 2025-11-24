@@ -32,12 +32,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ voxelWorld }) => {
   } = useVoxelStore();
 
   const [autoRotate, setAutoRotate] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
 
   useEffect(() => {
     if (voxelWorld) {
         voxelWorld.setAutoRotate(autoRotate);
     }
   }, [autoRotate, voxelWorld]);
+
+  useEffect(() => {
+    if (voxelWorld) {
+      voxelWorld.setGridVisibility(showGrid);
+    }
+  }, [showGrid, voxelWorld]);
 
   const handleResetView = () => {
     if (voxelWorld) {
@@ -118,6 +125,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({ voxelWorld }) => {
                 style={autoRotate ? activeButtonStyle : buttonStyle}
             >
                 {autoRotate ? 'Stop Rotate' : 'Auto Rotate'}
+            </button>
+            <button
+                onClick={() => setShowGrid(!showGrid)}
+                style={showGrid ? activeButtonStyle : buttonStyle}
+            >
+                {showGrid ? 'Hide Grid' : 'Show Grid'}
             </button>
         </div>
       </div>

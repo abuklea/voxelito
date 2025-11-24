@@ -19,6 +19,8 @@ export class VoxelWorld {
   public controls: OrbitControls;
   /** Post-processing composer. */
   private composer: EffectComposer;
+  /** Grid helper for ground reference. */
+  private gridHelper: THREE.GridHelper;
   /** Flag to track if a render frame has been requested. */
   private renderRequested: boolean = false;
 
@@ -111,9 +113,9 @@ export class VoxelWorld {
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    const gridHelper = new THREE.GridHelper(200, 100, 0x7c3aed, 0x2d2d3b);
-    gridHelper.position.y = -0.05;
-    this.scene.add(gridHelper);
+    this.gridHelper = new THREE.GridHelper(200, 200, 0x7c3aed, 0x2d2d3b);
+    this.gridHelper.position.y = 0;
+    this.scene.add(this.gridHelper);
 
     // Handle Resize
     window.addEventListener('resize', () => this.handleResize());
@@ -216,5 +218,16 @@ export class VoxelWorld {
   public setAutoRotate(enabled: boolean) {
     this.controls.autoRotate = enabled;
     this.requestRender();
+  }
+
+  /**
+   * Sets the visibility of the grid helper.
+   * @param visible - Whether the grid should be visible.
+   */
+  public setGridVisibility(visible: boolean) {
+    if (this.gridHelper) {
+      this.gridHelper.visible = visible;
+      this.requestRender();
+    }
   }
 }
