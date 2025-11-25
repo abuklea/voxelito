@@ -35,3 +35,4 @@ __pycache__/
 .Python
 env/
 venv/
+tools/*.png
