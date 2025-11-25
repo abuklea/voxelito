@@ -29,10 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from api.common import PALETTE, PALETTE_MAP, PALETTE_DESCRIPTIONS
-from api.pipeline.octree import SparseVoxelOctree, CHUNK_SIZE
+from api.voxel_utils import VoxelGrid, convert_grid_to_chunks, ChunkResponse, CHUNK_SIZE, MIN_COORD, MAX_COORD
+from api.pipeline.octree import SparseVoxelOctree
 from api.pipeline.wfc import WFCLayoutGenerator, ZoneType
 from api.pipeline.assets import AssetGenerator
 from api.pipeline.super_res import SuperResolver
+from api.pipeline.image_gen import ImageToVoxelPipeline
 from api.copilot_utils import CopilotResponseBuilder
 
 # Load environment variables
@@ -127,17 +129,9 @@ class SceneDescription(BaseModel):
 class AgentResponse(BaseModel):
     commentary: str = Field(description="Conversational response to the user.")
     scene: Optional[SceneDescription] = Field(default=None, description="The 3D scene generation data (for specific shapes/edits).")
-    layout_intent: Optional[Literal['city', 'village', 'forest']] = Field(default=None, description="If generating a large NEW scene, specify the type here to use the Advanced Pipeline.")
-
-# --- API Models ---
-class ChunkResponse(BaseModel):
-    position: List[int]
-    rle_data: str
-    palette: List[str]
-
-# --- Constants ---
-MIN_COORD = -512
-MAX_COORD = 512
+    layout_intent: Optional[Literal['city', 'village', 'forest', 'image_gen']] = Field(default=None, description="If generating a large NEW scene, specify the type here.")
+    image_gen_prompt: Optional[str] = Field(default=None, description="If layout_intent is 'image_gen', provide the optimized DALL-E prompt here.")
+    multi_view: bool = Field(default=False, description="If layout_intent is 'image_gen', set to True if the user asks for front and back or multi-view.")
 
 # --- Rate Limiting ---
 RATE_LIMIT_WINDOW = 60
@@ -152,48 +146,6 @@ def check_rate_limit(client_ip: str):
     if len(request_counts[client_ip]) >= RATE_LIMIT_MAX_REQUESTS:
         raise RateLimitError("Too many requests")
     request_counts[client_ip].append(current_time)
-
-# --- Rasterization Logic ---
-class VoxelGrid:
-    def __init__(self):
-        self.chunks: Dict[tuple, List[int]] = {}
-
-    def get_chunk(self, cx, cy, cz):
-        key = (cx, cy, cz)
-        if key not in self.chunks:
-            self.chunks[key] = [0] * (CHUNK_SIZE ** 3)
-        return self.chunks[key]
-
-    def fill_chunk(self, cx, cy, cz, material_idx):
-        self.chunks[(cx, cy, cz)] = [material_idx] * (CHUNK_SIZE ** 3)
-
-    def set_voxel(self, x, y, z, material_idx):
-        if not (MIN_COORD <= x < MAX_COORD and MIN_COORD <= y < MAX_COORD and MIN_COORD <= z < MAX_COORD):
-            return
-        cx, rx = divmod(x, CHUNK_SIZE)
-        cy, ry = divmod(y, CHUNK_SIZE)
-        cz, rz = divmod(z, CHUNK_SIZE)
-        chunk = self.get_chunk(cx, cy, cz)
-        index = rx + ry * CHUNK_SIZE + rz * CHUNK_SIZE * CHUNK_SIZE
-        chunk[index] = material_idx
-
-def convert_grid_to_chunks(chunks_dict: Dict[tuple, List[int]]) -> List[ChunkResponse]:
-    response_chunks = []
-    for (cx, cy, cz), voxels in chunks_dict.items():
-        rle_parts = []
-        current_val = voxels[0]
-        current_count = 1
-        for val in voxels[1:]:
-            if val == current_val:
-                current_count += 1
-            else:
-                rle_parts.append(f"{current_val}:{current_count}")
-                current_val = val
-                current_count = 1
-        rle_parts.append(f"{current_val}:{current_count}")
-        rle_str = ",".join(rle_parts)
-        response_chunks.append(ChunkResponse(position=[cx, cy, cz], rle_data=rle_str, palette=PALETTE))
-    return response_chunks
 
 def rasterize_scene(scene_desc: SceneDescription) -> List[ChunkResponse]:
     logger.info(f"Rasterizing {len(scene_desc.shapes)} shapes")
@@ -464,10 +416,13 @@ def get_agent(system_extension: str = ""):
             "MODES:\n"
             "1. **Editing / Small Objects**: Return `scene` with specific shapes.\n"
             "2. **New Large Scene**: Return `layout_intent` ('city', 'village') to use the advanced pipeline. DO NOT return `scene` shapes for full cities, use `layout_intent`.\n"
+            "3. **Dream / Image**: If the user asks to 'dream', 'imagine', 'visualize' or implies using an image generator, use `layout_intent='image_gen'`. Provide `image_gen_prompt`.\n"
+            "   - If they ask for 'multi-view' or 'both sides', set `multi_view=True`.\n"
             "\n"
             "SCENE SCALES:\n"
             "- Small/Edit: Use 'scene' with Box, Tree, etc.\n"
             "- Large City/Village: Use 'layout_intent'.\n"
+            "- Image/Dream: Use 'image_gen'.\n"
             "\n"
             "Available materials:\n" + "\n".join([f"- {name}: {desc}" for name, desc in PALETTE_DESCRIPTIONS.items()]) + "\n"
             "\n" + system_extension + "\n"
@@ -476,6 +431,7 @@ def get_agent(system_extension: str = ""):
             "2. Provide 'commentary'.\n"
             "3. If the user asks for a City, Town, or huge landscape, SET `layout_intent` and explain you are using the 'Hierarchical Pipeline'.\n"
             "4. If editing, use `scene`.\n"
+            "5. If using 'image_gen', optimize the `image_gen_prompt` to be descriptive (e.g. 'Isometric view, ...').\n"
         )
     )
 
@@ -539,7 +495,14 @@ async def stream_handler(body: dict, client_ip: str):
              raise ValueError("Cannot find data in agent result")
 
         chunks_data = []
-        if agent_response.layout_intent:
+        if agent_response.layout_intent == 'image_gen':
+             logger.info(f"Using ImageToVoxelPipeline. Prompt: {agent_response.image_gen_prompt}")
+             pipeline = ImageToVoxelPipeline()
+             # Use generated prompt or fallback to user prompt
+             prompt = agent_response.image_gen_prompt or user_prompt
+             chunks = await pipeline.run(prompt, multi_view=agent_response.multi_view)
+             chunks_data = [chunk.model_dump() for chunk in chunks]
+        elif agent_response.layout_intent:
              # Use Pipeline
              logger.info(f"Using pipeline for intent: {agent_response.layout_intent}")
              chunks = run_pipeline(agent_response.layout_intent)
