@@ -3,3 +3,14 @@ python-dotenv
 fastapi
 uvicorn
 nest_asyncio
+transformers
+torch
+opencv-python
+Pillow
+rembg
+scipy
+numba
+scikit-learn
+scikit-image
+matplotlib
+open3d
